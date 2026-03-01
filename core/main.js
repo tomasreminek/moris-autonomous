@@ -211,6 +211,11 @@ class MorisCore {
     // Input sanitization
     this.app.use(Validator.sanitizeBody);
 
+    // Root route FIRST (before other routes)
+    this.app.get('/', (req, res) => {
+      res.send(`<!DOCTYPE html><html><head><title>MORIS</title></head><body><h1>🚀 MORIS Autonomous</h1><p>12-Agent AI System running on port ${this.config.port}</p><div><a href="/health">Health</a> | <a href="/api/agents">Agents</a> | <a href="/api/stats">Stats</a></div></body></html>`);
+    });
+
     // Routes
     this.setupRoutes();
 
