@@ -1,244 +1,204 @@
-# 🔥 MORIS Autonomous v2.1
+# 🚀 MORIS Autonomous
 
-> **Enterprise AI Agent Ecosystem** — Production-ready autonomous system with database, real-time communication, intelligent orchestration, and extensive integrations.
+**21-Agent AI Workforce System** — Multi-agent orchestration plugin for OpenClaw
 
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/tomasreminek/moris-autonomous)
-[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![OpenClaw Plugin](https://img.shields.io/badge/OpenClaw-Plugin-blue)](https://docs.openclaw.ai)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-2.0.0-orange)](package.json)
+
+MORIS Autonomous brings a complete **21-agent AI workforce** to OpenClaw. Each agent specializes in a different domain and can be purchased individually or as part of team packages.
+
+---
+
+## ✨ Features
+
+### 🤖 21 Specialized Agents
+
+| Agent | Role | Price |
+|-------|------|-------|
+| 🧠 **Moris** | CEO / Orchestrator | Included |
+| 🌸 **Dahlia** | Personal Assistant | $19/mo |
+| 💻 **Coder** | Lead Developer | $24/mo |
+| 💰 **CFO** | Financial Officer | $29/mo |
+| ✍️ **Copywriter** | Content Creator | $24/mo |
+| 📈 **Marketing** | Growth Manager | $24/mo |
+| 🔒 **Security** | Security Auditor | $24/mo |
+| 🔍 **QA** | QA Tester | $24/mo |
+| ⚙️ **DevOps** | Infrastructure | $24/mo |
+| 🎨 **Designer** | Creative Director | $24/mo |
+| 📊 **Analyst** | Data Analyst | $24/mo |
+| ⚖️ **Legal** | Legal Counsel | $24/mo |
+| ...and 9 more! | | |
+
+### 🏢 Pricing Tiers
+
+| Package | Agents | Price | Savings |
+|---------|--------|-------|---------|
+| **Individual** | 1 agent | $19-29/mo | — |
+| **Startup** | 5 agents | $49/mo | 45% |
+| **Business** | 12 agents | $89/mo | 52% |
+| **Enterprise** | 21 agents | $149/mo | 64% |
+
+### 🔧 Core Features
+
+- **📄 RAG Learning** — Upload PDFs, documents for agents to learn from
+- **📋 Project Management** — Create projects, assign tasks to agents, track progress
+- **🔌 OpenClaw Integration** — Native plugin with slash commands, agent tools, RPC
+- **🌐 Self-Hosted** — Deploy on your own infrastructure (Docker, Coolify, etc.)
+- **⚡ WebSocket Real-time** — Live updates across all agents
+- **🔐 Authentication** — Multi-user support with subscription management
 
 ---
 
 ## 🚀 Quick Start
 
+### Prerequisites
+- OpenClaw Gateway installed
+- Node.js 18+ (for self-hosted mode)
+- Docker (optional)
+
+### Installation
+
 ```bash
-# Clone repository
-git clone https://github.com/tomasreminek/moris-autonomous.git
-cd moris-autonomous
+# Install as OpenClaw plugin
+openclaw plugins install @community/moris-autonomous
 
-# Copy environment config
-cp .env.example .env
+# Or install from local directory
+openclaw plugins install ./moris-autonomous
 
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
+# Enable in config
+openclaw plugins enable moris-autonomous
 ```
 
-**Access the system:**
-- 🌐 **Landing Page**: http://localhost/
-- 📊 **Dashboard**: http://localhost/dashboard
-- 🔌 **API**: http://localhost/api
-- ❤️ **Health**: http://localhost/health
+### Configuration
 
----
+Add to your OpenClaw config:
 
-## 📁 Project Structure
-
-```
-moris-autonomous/
-├── core/                       # Core API & Infrastructure
-│   ├── main.js                 # Main server (integrated)
-│   ├── database.js             # SQLite database layer
-│   ├── websocket.js            # Real-time communication
-│   ├── task-queue.js           # Bull queue with Redis
-│   ├── reporting.js            # Reporting system
-│   ├── agents.js               # Agent framework
-│   ├── logger.js               # Winston logging
-│   ├── error-handler.js        # Error handling
-│   ├── monitor.js              # Health monitoring
-│   ├── Dockerfile              # Container config
-│   └── package.json
-│
-├── dashboard/                  # Dashboard UI
-│   ├── server.js               # Dashboard server
-│   ├── public/
-│   │   └── dashboard.html      # Dashboard UI
-│   ├── Dockerfile
-│   └── package.json
-│
-├── public/                     # Landing page
-│   └── index.html
-│
-├── docker-compose.yml          # Full orchestration
-├── nginx.conf                  # Reverse proxy
-├── .env.example                # Environment template
-└── README.md                   # This file
-```
-
----
-
-## 🏗️ Architecture
-
-### Services
-
-| Service | Port | Description |
-|---------|------|-------------|
-| nginx | 80 | Reverse proxy, landing page |
-| moris-core | 3001 | REST API, WebSocket |
-| moris-dashboard | 3005 | Dashboard UI |
-| redis | 6379 | Task queue backing |
-
-### Infrastructure Components
-
-- **💾 Database**: SQLite with better-sqlite3 (WAL mode)
-- **🌐 WebSocket**: Real-time updates for dashboard
-- **📋 Task Queue**: Bull queue with Redis, auto-retry
-- **📊 Reporting**: Automated reports with exports
-- **🤖 Agents**: Base class with skill registry
-- **🔒 Security**: Helmet, rate limiting, CORS
-- **📝 Logging**: Winston with rotation
-
----
-
-## 🔌 API Reference
-
-### Agents
-```
-GET    /api/agents           # List all agents
-GET    /api/agents/:id       # Get agent details
-```
-
-### Tasks
-```
-GET    /api/tasks            # List tasks
-POST   /api/tasks            # Create task
-GET    /api/tasks/:id        # Get task
-```
-
-### Reports
-```
-GET    /api/reports          # List reports
-POST   /api/reports          # Generate report
-GET    /api/reports/:id      # Get report
-```
-
-### Logs
-```
-GET    /api/logs             # Activity logs
-```
-
-### Stats
-```
-GET    /api/stats            # System statistics
-GET    /api/websocket        # WebSocket stats
-GET    /health               # Health check
-```
-
----
-
-## 🤖 Agent System
-
-### Built-in Agents
-
-| Agent | Role | Skills |
-|-------|------|--------|
-| Moris | Orchestrator | Task routing, decision making |
-| Dahlia | Assistant | General assistance |
-| Pro Coder | Developer | Code writing, review, debug |
-| Copywriter | Content | Writing, editing, brainstorming |
-
-### Creating Custom Agents
-
-```javascript
-const { BaseAgent } = require('./core/agents');
-
-class MyAgent extends BaseAgent {
-  constructor(config) {
-    super({ name: 'MyAgent', role: 'custom', ...config });
-    this.registerSkill('my_task', this.myTask.bind(this));
-  }
-  
-  async myTask(data) {
-    // Your logic here
-    return { result: 'success' };
+```json
+{
+  "plugins": {
+    "entries": {
+      "moris-autonomous": {
+        "enabled": true,
+        "config": {
+          "port": 3001,
+          "adminPassword": "your-secure-password",
+          "features": {
+            "rag": true,
+            "projectManagement": true,
+            "pricing": true
+          }
+        }
+      }
+    }
   }
 }
 ```
 
----
+### Access Dashboard
 
-## 📊 Monitoring
-
-### Health Checks
-```bash
-curl http://localhost/health
-```
-
-### System Stats
-```bash
-curl http://localhost/api/stats
-```
-
-### WebSocket Status
-```bash
-curl http://localhost/api/websocket
-```
+Once installed and running:
+- **Dashboard**: `http://localhost:3001` (or your configured port)
+- **API**: `http://localhost:3001/api/`
+- **WebSocket**: `ws://localhost:3002`
 
 ---
 
-## 🚀 Deployment
+## 🎮 Usage
 
-### Docker (Recommended)
-```bash
-docker-compose up -d
+### Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/moris` | Open dashboard URL |
+| `/moris-agents` | List all 21 agents |
+| `/moris-tasks` | Show active tasks |
+| `/moris-buy [package]` | Purchase agent/package |
+
+### Agent Tools (Auto-available in OpenClaw)
+
+```
+@moris Delegate task "Write a blog post about AI" to copywriter priority:8
+@moris Create project "Q4 Marketing" with agents: marketing, copywriter, designer
+@moris Get agents status
+@moris Upload document "annual-report.pdf" for cfo
 ```
 
-### Development
-```bash
-# Terminal 1: Core
-cd core && npm install && node main.js
+### API Endpoints
 
-# Terminal 2: Dashboard
-cd dashboard && npm install && node server.js
-
-# Terminal 3: Redis
-docker run -p 6379:6379 redis:7-alpine
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | System health |
+| `/api/agents` | GET | List all agents |
+| `/api/agents/:id` | GET | Agent details |
+| `/api/tasks` | GET/POST | Task management |
+| `/api/projects` | GET/POST | Project management |
+| `/api/documents` | POST | Upload documents (RAG) |
 
 ---
 
-## 📝 Environment Variables
+## 🐳 Self-Hosted Deployment
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| NODE_ENV | production | Environment mode |
-| PORT | 3001 | Core API port |
-| WS_PORT | 3002 | WebSocket port |
-| DB_PATH | ./data/moris.db | Database location |
-| REDIS_URL | redis://localhost:6379 | Redis connection |
-| LOG_LEVEL | info | Logging level |
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  moris:
+    image: tomasreminek/moris-autonomous:latest
+    ports:
+      - "3003:3001"
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=your-secret-key
+      - ADMIN_PASSWORD=admin-password
+    volumes:
+      - ./data:/app/data
+      - ./documents:/app/documents
+    restart: unless-stopped
+```
+
+### Coolify Deployment
+
+1. Create new application in Coolify
+2. Source: `https://github.com/tomasreminek/moris-autonomous`
+3. Port: `3001`
+4. Environment variables:
+   - `JWT_SECRET` — Secure random string
+   - `ADMIN_PASSWORD` — Demo admin password
 
 ---
 
-## 🛠️ Development
+## 📚 Documentation
 
-### Prerequisites
-- Node.js 18+
-- Docker & Docker Compose
-- Redis (for task queue)
+- [Agent Capabilities](docs/agents.md)
+- [RAG System](docs/rag.md)
+- [Project Management](docs/pm.md)
+- [API Reference](docs/api.md)
+- [Pricing Model](docs/pricing.md)
 
-### Commands
-```bash
-# Install dependencies
-cd core && npm install
+---
 
-# Run tests
-npm test
+## 🤝 Contributing
 
-# Lint code
-npm run lint
-
-# Build for production
-docker-compose build
-```
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ---
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE)
 
 ---
 
-Built with ❤️ by MORIS AI
+## 🔗 Links
+
+- [OpenClaw Docs](https://docs.openclaw.ai)
+- [Plugin Community](https://docs.openclaw.ai/plugins/community)
+- [GitHub](https://github.com/tomasreminek/moris-autonomous)
+- [Discord](https://discord.gg/moris)
+
+---
+
+Made with 💙 for the OpenClaw community

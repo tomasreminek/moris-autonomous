@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const session = require('express-session');
 const compression = require('compression');
 const path = require('path');
 
@@ -152,7 +153,26 @@ class MorisCore {
     
     // Compression
     this.app.use(compression());
-    
+
+    // Session middleware for authentication
+    this.app.use(session({
+      secret: process.env.JWT_SECRET || 'moris-secret-demo-key',
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        secure: process.env.NODE_ENV === 'production'
+      }
+    }));
+
+    // Auth middleware
+    this.authMiddleware = (req, res, next) => {
+      if (req.session && req.session.authenticated) {
+        return next();
+      }
+      return res.status(401).json({ success: false, error: 'Unauthorized - Please login' });
+    };
+
     // Request context & correlation IDs
     this.app.use(requestContext.middleware());
     

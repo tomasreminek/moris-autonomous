@@ -1,0 +1,197 @@
+{
+  "id": "moris-autonomous",
+  "name": "MORIS Autonomous",
+  "version": "2.0.0",
+  "description": "21-Agent AI Workforce System with RAG learning, project management, and subscription pricing",
+  "author": "tomasreminek",
+  "license": "MIT",
+  "openclaw": {
+    "extensions": ["./plugin/index.ts"],
+    "skills": ["./skills"],
+    "channel": {
+      "id": "moris-autonomous",
+      "label": "MORIS Autonomous",
+      "selectionLabel": "MORIS Autonomous (21-Agent AI System)",
+      "docsPath": "/plugins/moris-autonomous",
+      "docsLabel": "moris-autonomous",
+      "blurb": "21-Agent AI Workforce with RAG learning, project management, and subscription pricing",
+      "order": 100,
+      "aliases": ["moris", "moris-ai"]
+    },
+    "install": {
+      "npmSpec": "@community/moris-autonomous",
+      "localPath": "extensions/moris-autonomous",
+      "defaultChoice": "npm"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true, "description": "Enable the plugin" },
+      "port": { "type": "number", "default": 3001, "description": "Server port" },
+      "host": { "type": "string", "default": "0.0.0.0", "description": "Bind host" },
+      "adminPassword": { "type": "string", "default": "demo-admin-2024", "description": "Default admin password" },
+      "features": {
+        "type": "object",
+        "properties": {
+          "rag": { "type": "boolean", "default": true, "description": "Enable PDF/RAG learning" },
+          "projectManagement": { "type": "boolean", "default": true, "description": "Enable project management" },
+          "pricing": { "type": "boolean", "default": true, "description": "Enable subscription pricing" },
+          "subagents": { "type": "boolean", "default": true, "description": "Enable agent ecosystem" }
+        }
+      },
+      "limits": {
+        "type": "object",
+        "properties": {
+          "maxDocumentsPerAgent": { "type": "number", "default": 100 },
+          "maxProjects": { "type": "number", "default": 50 },
+          "maxTasksPerProject": { "type": "number", "default": 100 }
+        }
+      },
+      "pricing": {
+        "type": "object",
+        "properties": {
+          "individual": { "type": "number", "default": 19 },
+          "team": { "type": "number", "default": 49 },
+          "enterprise": { "type": "number", "default": 149 }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": { "label": "Enable MORIS Autonomous" },
+    "port": { "label": "Server Port", "placeholder": "3001" },
+    "host": { "label": "Bind Host", "placeholder": "0.0.0.0" },
+    "adminPassword": { "label": "Admin Password", "sensitive": true },
+    "features.rag": { "label": "Enable RAG (PDF Learning)" },
+    "features.projectManagement": { "label": "Enable Project Management" },
+    "features.pricing": { "label": "Enable Pricing/Subscriptions" },
+    "features.subagents": { "label": "Enable Agent Ecosystem" },
+    "limits.maxDocumentsPerAgent": { "label": "Max Documents per Agent" },
+    "pricing.individual": { "label": "Individual Agent ($/mo)" },
+    "pricing.team": { "label": "Startup Team ($/mo)" },
+    "pricing.enterprise": { "label": "Enterprise ($/mo)" }
+  },
+  "agentTools": [
+    {
+      "name": "moris_delegate_task",
+      "description": "Delegate a task to a specialized agent in the MORIS ecosystem (coder, copywriter, cfo, etc.)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": { "type": "string", "description": "Task description" },
+          "agent_type": { 
+            "type": "string", 
+            "enum": ["moris", "dahlia", "coder", "copywriter", "marketing", "cfo", "security", "designer", "analyst", "lawyer", "devops", "qa"],
+            "description": "Agent to delegate to"
+          },
+          "priority": { "type": "number", "minimum": 1, "maximum": 10, "default": 5 },
+          "deadline": { "type": "string", "description": "ISO 8601 deadline" }
+        },
+        "required": ["task", "agent_type"]
+      }
+    },
+    {
+      "name": "moris_create_project",
+      "description": "Create a new project with multiple agents assigned",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Project name" },
+          "description": { "type": "string" },
+          "agents": { "type": "array", "items": { "type": "string" }, "description": "Agent IDs to include" },
+          "deadline": { "type": "string" }
+        },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "moris_upload_document",
+      "description": "Upload a PDF or document for RAG (agent learning)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string", "description": "Agent to learn from document" },
+          "document_path": { "type": "string", "description": "Path to document" },
+          "description": { "type": "string" }
+        },
+        "required": ["agent_id", "document_path"]
+      }
+    },
+    {
+      "name": "moris_agents_status",
+      "description": "Get current status of all agents and their workload",
+      "parameters": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "moris_query_documents",
+      "description": "Query agent's learned documents (RAG search)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string" },
+          "query": { "type": "string", "description": "Search query" },
+          "limit": { "type": "number", "default": 5 }
+        },
+        "required": ["agent_id", "query"]
+      }
+    },
+    {
+      "name": "moris_purchase_agent",
+      "description": "Purchase or subscribe to an individual agent or team package",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["individual", "startup", "business", "enterprise"], "description": "Package type" },
+          "agent_id": { "type": "string", "description": "For individual: which agent" },
+          "user_email": { "type": "string" }
+        },
+        "required": ["type", "user_email"]
+      }
+    }
+  ],
+  "commands": [
+    {
+      "name": "moris",
+      "description": "Open MORIS dashboard",
+      "requireAuth": false
+    },
+    {
+      "name": "moris-status",
+      "description": "Get detailed system status",
+      "requireAuth": true
+    },
+    {
+      "name": "moris-agents",
+      "description": "List all 21 available agents with their capabilities",
+      "requireAuth": false
+    },
+    {
+      "name": "moris-tasks",
+      "description": "View active tasks across all agents",
+      "requireAuth": true
+    },
+    {
+      "name": "moris-projects",
+      "description": "List active projects",
+      "requireAuth": true
+    },
+    {
+      "name": "moris-buy",
+      "description": "Purchase agent or team package",
+      "acceptsArgs": true,
+      "requireAuth": true
+    }
+  ],
+  "hooks": [
+    {
+      "event": "plugin:enable",
+      "handler": "autoStartServer"
+    },
+    {
+      "event": "plugin:disable",
+      "handler": "stopServer"
+    }
+  ]
+}

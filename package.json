@@ -1,34 +1,85 @@
 {
-  "name": "moris-core",
-  "version": "2.1.0",
-  "description": "MORIS Core with full infrastructure - Database, WebSocket, Task Queue, Reporting",
-  "main": "main.js",
-  "bin": {
-    "moris": "./cli.js"
-  },
+  "name": "@community/moris-autonomous",
+  "version": "2.0.0",
+  "description": "21-Agent AI Workforce System - OpenClaw Plugin",
+  "main": "plugin/index.ts",
+  "type": "module",
   "scripts": {
-    "start": "node main.js",
-    "dev": "NODE_ENV=development node main.js",
-    "test": "node test-runner.js",
-    "cli": "node cli.js"
+    "build": "tsc",
+    "start": "node core/main.js",
+    "dev": "node --watch core/main.js",
+    "test": "node core/tests.js"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "ai-agents",
+    "orchestration",
+    "multi-agent",
+    "rag",
+    "project-management",
+    "workforce",
+    "automation"
+  ],
+  "author": "tomasreminek",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomasreminek/moris-autonomous.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tomasreminek/moris-autonomous/issues"
+  },
+  "homepage": "https://github.com/tomasreminek/moris-autonomous#readme",
+  "openclaw": {
+    "extensions": ["./plugin/index.ts"],
+    "skills": ["./skills"],
+    "channel": {
+      "id": "moris-autonomous",
+      "label": "MORIS Autonomous",
+      "selectionLabel": "MORIS Autonomous (21-Agent AI System)",
+      "docsPath": "/plugins/moris-autonomous",
+      "docsLabel": "moris-autonomous",
+      "blurb": "21-Agent AI Workforce with RAG learning, project management, and subscription pricing.",
+      "order": 100,
+      "aliases": ["moris", "moris-ai"]
+    },
+    "install": {
+      "npmSpec": "@community/moris-autonomous",
+      "localPath": "extensions/moris-autonomous",
+      "defaultChoice": "npm"
+    }
+  },
+  "files": [
+    "core/**/*",
+    "plugin/**/*",
+    "skills/**/*",
+    "dashboard/**/*",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
   },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "winston": "^3.11.0",
     "helmet": "^7.1.0",
-    "morgan": "^1.10.0",
-    "express-rate-limit": "^7.1.5",
-    "better-sqlite3": "^9.4.0",
-    "ws": "^8.16.0",
-    "bull": "^4.12.0",
-    "uuid": "^9.0.1",
-    "jsonwebtoken": "^9.0.2",
-    "commander": "^11.1.0",
-    "chalk": "^4.1.2",
-    "node-cron": "^3.0.3",
-    "nodemailer": "^6.9.7",
-    "compression": "^1.7.4"
+    "compression": "^1.7.4",
+    "express-rate-limit": "^7.1.0",
+    "express-session": "^1.17.3",
+    "ws": "^8.14.0",
+    "better-sqlite3": "^9.0.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "uuid": "^9.0.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.0.0"
   }
 }
