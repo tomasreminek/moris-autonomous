@@ -1,31 +1,69 @@
 version: '3.8'
 
 services:
+  # Redis for task queue
+  redis:
+    image: redis:7-alpine
+    container_name: moris-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # MORIS Core API
   moris-core:
-    image: node:18-alpine
+    build:
+      context: ./core
+      dockerfile: Dockerfile
     container_name: moris-core
-    working_dir: /app
-    command: sh -c "npm install express cors dotenv && node server.js"
     ports:
       - "3001:3001"
+      - "3002:3002"
     volumes:
-      - ./core:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./reports:/app/reports
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - WS_PORT=3002
+      - DB_PATH=/app/data/moris.db
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # MORIS Dashboard
   moris-dashboard:
-    image: node:18-alpine
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
     container_name: moris-dashboard
-    working_dir: /app
-    command: npx http-server -p 3005
     ports:
       - "3005:3005"
-    volumes:
-      - ./public:/app
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - API_URL=http://moris-core:3001
+      - WS_URL=ws://moris-core:3002
+    depends_on:
+      - moris-core
     restart: unless-stopped
 
+  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: moris-nginx
@@ -39,6 +77,5 @@ services:
       - moris-dashboard
     restart: unless-stopped
 
-networks:
-  default:
-    name: moris-network
+volumes:
+  redis-data:

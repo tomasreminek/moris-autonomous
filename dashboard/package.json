@@ -1,0 +1,9 @@
+{
+  "name": "moris-dashboard",
+  "version": "2.0.0",
+  "description": "MORIS Dashboard UI",
+  "main": "server.js",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
