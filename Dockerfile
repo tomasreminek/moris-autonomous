@@ -13,12 +13,15 @@ COPY skills ./skills
 # Create data directories
 RUN mkdir -p data logs reports
 
-# Health check on port 3003
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD wget -q --spider http://localhost:3003/health || exit 1
+ENV PORT=3003
+ENV NODE_ENV=production
 
 # Expose ports
 EXPOSE 3003 3002
+
+# Health check on port 3003 using 127.0.0.1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget -q --spider http://127.0.0.1:3003/health || exit 1
 
 # Start the application
 CMD ["node", "main.js"]
