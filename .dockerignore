@@ -1,0 +1,38 @@
+# Node modules (installed during build)
+node_modules
+npm-debug.log
+
+# Environment files (provided by Coolify)
+.env
+.env.local
+.env.*
+
+# Development files
+.git
+.gitignore
+.github
+*.md
+!README.md
+
+# Logs
+logs/*.log
+*.log
+
+# Test files
+*.test.js
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
