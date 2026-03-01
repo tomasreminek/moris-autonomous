@@ -28,7 +28,7 @@ const { HTTP_STATUS, RATE_LIMIT, LIMITS } = require('./constants');
 class MorisCore {
   constructor(config = {}) {
     this.config = {
-      port: config.port || 3001,
+      port: config.port || parseInt(process.env.PORT) || 3001,
       wsPort: config.wsPort || 3002,
       dbPath: config.dbPath || './data/moris.db',
       redisUrl: config.redisUrl || 'redis://localhost:6379'
