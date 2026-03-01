@@ -1,8 +1,14 @@
 {
   "name": "moris-core",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "MORIS Core with full infrastructure - Database, WebSocket, Task Queue, Reporting",
   "main": "main.js",
+  "scripts": {
+    "start": "node main.js",
+    "dev": "NODE_ENV=development node main.js",
+    "test": "node test-runner.js",
+    "lint": "echo 'Linting not configured'"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
