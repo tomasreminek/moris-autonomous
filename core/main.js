@@ -6,8 +6,8 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const compression = require('compression');
 const path = require('path');
 
 const { logger } = require('./logger');
@@ -18,6 +18,10 @@ const { TaskQueue, JobTypes, createAgentTaskProcessor, createReportProcessor } =
 const { ReportingSystem } = require('./reporting');
 const { HealthMonitor } = require('./monitor');
 const { AgentRegistry, CoderAgent, CopywriterAgent } = require('./agents');
+const { Validator } = require('./validation');
+const { requestContext } = require('./context');
+const { RequestLogger } = require('./request-logger');
+const { HTTP_STATUS, RATE_LIMIT, LIMITS } = require('./constants');
 
 class MorisCore {
   constructor(config = {}) {
@@ -131,29 +135,84 @@ class MorisCore {
   }
 
   setupExpress() {
-    // Security middleware
-    this.app.use(helmet({ contentSecurityPolicy: false }));
-    this.app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+    // Trust proxy (for correct IP behind nginx)
+    this.app.set('trust proxy', 1);
     
-    // Rate limiting
-    const limiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 100,
-      message: { success: false, error: { message: 'Too many requests', code: 'RATE_LIMITED' }}
+    // Security middleware
+    this.app.use(helmet({ 
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false
+    }));
+    this.app.use(cors({ 
+      origin: process.env.CORS_ORIGIN || '*',
+      credentials: true
+    }));
+    
+    // Compression
+    this.app.use(compression());
+    
+    // Request context & correlation IDs
+    this.app.use(requestContext.middleware());
+    
+    // Enhanced request logging
+    this.app.use(RequestLogger.create({ 
+      logBody: process.env.NODE_ENV === 'development',
+      sensitiveFields: ['password', 'token', 'secret', 'apiKey', 'api_key', 'jwt']
+    }));
+    
+    // Rate limiting with different tiers
+    const standardLimiter = rateLimit({
+      windowMs: RATE_LIMIT.DEFAULT_WINDOW_MS,
+      max: RATE_LIMIT.DEFAULT_MAX_REQUESTS,
+      standardHeaders: true,
+      legacyHeaders: false,
+      keyGenerator: (req) => req.ip || req.connection.remoteAddress,
+      handler: (req, res) => {
+        res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
+          success: false,
+          error: { 
+            message: 'Too many requests, please try again later',
+            code: 'RATE_LIMITED',
+            retryAfter: Math.ceil(RATE_LIMIT.DEFAULT_WINDOW_MS / 1000)
+          }
+        });
+      }
     });
-    this.app.use('/api/', limiter);
+    
+    const strictLimiter = rateLimit({
+      windowMs: RATE_LIMIT.AUTH_WINDOW_MS,
+      max: RATE_LIMIT.AUTH_MAX_REQUESTS,
+      handler: (req, res) => {
+        res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
+          success: false,
+          error: { 
+            message: 'Too many authentication attempts',
+            code: 'AUTH_RATE_LIMITED'
+          }
+        });
+      }
+    });
+    
+    this.app.use('/api/', standardLimiter);
+    this.app.use('/api/auth/', strictLimiter);
 
-    // Body parsing
-    this.app.use(express.json({ limit: '10mb' }));
-    this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-    // HTTP logging
-    this.app.use(morgan('combined', { stream: { write: msg => logger.info(msg.trim()) }}));
+    // Body parsing with limits
+    this.app.use(express.json({ 
+      limit: LIMITS.MAX_JSON_PAYLOAD,
+      strict: true // Only accept arrays and objects
+    }));
+    this.app.use(express.urlencoded({ 
+      extended: true, 
+      limit: LIMITS.MAX_JSON_PAYLOAD 
+    }));
+    
+    // Input sanitization
+    this.app.use(Validator.sanitizeBody);
 
     // Routes
     this.setupRoutes();
 
-    // Error handling
+    // Error handling (must be last)
     this.app.use(notFoundHandler);
     this.app.use(errorHandler);
   }
