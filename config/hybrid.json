@@ -1,0 +1,28 @@
+{
+  "deployment": "hybrid",
+  "description": "Standalone + OpenClaw adapter",
+  "components": {
+    "gateway": { "enabled": true, "type": "internal" },
+    "channels": { "enabled": true, "types": ["api", "webhook"] },
+    "auth": { "enabled": true, "type": "jwt" },
+    "database": { "enabled": true, "type": "sqlite" },
+    "queue": { "enabled": true, "type": "redis" },
+    "dashboard": { "enabled": true },
+    "agents": { "enabled": true, "count": 12 },
+    "rag": { "enabled": true },
+    "simulation": { "enabled": true },
+    "openclawAdapter": { "enabled": true }
+  },
+  "external": {
+    "openclaw": { 
+      "enabled": true,
+      "asAdapter": true,
+      "bidirectional": true
+    }
+  },
+  "commercial": {
+    "canSell": true,
+    "license": "MIT + Commercial add-ons",
+    "note": "Standalone can be sold, adapter is free"
+  }
+}

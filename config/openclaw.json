@@ -1,0 +1,28 @@
+{
+  "deployment": "openclaw-extension",
+  "description": "MORIS as OpenClaw extension",
+  "components": {
+    "gateway": { "enabled": false, "external": "openclaw" },
+    "channels": { "enabled": false, "external": "openclaw" },
+    "auth": { "enabled": false, "external": "openclaw" },
+    "database": { "enabled": true, "type": "sqlite" },
+    "queue": { "enabled": true, "type": "redis" },
+    "dashboard": { "enabled": false },
+    "agents": { "enabled": true, "count": 12 },
+    "rag": { "enabled": true },
+    "simulation": { "enabled": true }
+  },
+  "external": {
+    "openclaw": { 
+      "enabled": true,
+      "useGateway": true,
+      "useChannels": true,
+      "useAuth": true,
+      "useTools": true
+    }
+  },
+  "commercial": {
+    "canSell": false,
+    "note": "Personal use only - relies on OpenClaw infrastructure"
+  }
+}
