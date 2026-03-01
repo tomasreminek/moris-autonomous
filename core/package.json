@@ -1,7 +1,8 @@
 {
   "name": "moris-core",
-  "version": "1.1.0",
-  "description": "Enhanced MORIS core with logging, monitoring, and security",
+  "version": "2.0.0",
+  "description": "MORIS Core with full infrastructure - Database, WebSocket, Task Queue, Reporting",
+  "main": "main.js",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
@@ -9,6 +10,10 @@
     "winston": "^3.11.0",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
-    "express-rate-limit": "^7.1.5"
+    "express-rate-limit": "^7.1.5",
+    "better-sqlite3": "^9.4.0",
+    "ws": "^8.16.0",
+    "bull": "^4.12.0",
+    "uuid": "^9.0.1"
   }
 }
