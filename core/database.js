@@ -1,3 +1,4 @@
+/*
  * Database Layer
  * SQLite with better-sqlite3 for performance
  */
