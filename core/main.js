@@ -18,6 +18,8 @@ const { TaskQueue, JobTypes, createAgentTaskProcessor, createReportProcessor } =
 const { ReportingSystem } = require('./reporting');
 const { HealthMonitor } = require('./monitor');
 const { AgentRegistry, CoderAgent, CopywriterAgent } = require('./agents');
+const { WeatherAgent, SecurityAgent, SkillCreatorAgent } = require('./agents-skilled');
+const { SkillLoader } = require('./skill-loader');
 const { Validator } = require('./validation');
 const { requestContext } = require('./context');
 const { RequestLogger } = require('./request-logger');
@@ -367,6 +369,96 @@ class MorisCore {
         stats: this.wsServer.getStats()
       });
     });
+
+    // Skill routes
+    this.setupSkillRoutes();
+  }
+
+  setupSkillRoutes() {
+    // Skill catalog
+    this.app.get('/api/skills', asyncHandler(async (req, res) => {
+      const skillLoader = new SkillLoader();
+      await skillLoader.loadAllSkills();
+      const catalog = skillLoader.getCatalog();
+      
+      res.json({
+        success: true,
+        count: catalog.length,
+        skills: catalog
+      });
+    }));
+
+    // Execute skill
+    this.app.post('/api/skills/:name/execute', 
+      Validator.validateIdParam,
+      asyncHandler(async (req, res) => {
+        const { name } = req.params;
+        const { command = 'default', args = {} } = req.body;
+        
+        const skillLoader = new SkillLoader();
+        await skillLoader.loadAllSkills();
+        
+        const result = await skillLoader.execute(name, command, args);
+        
+        res.json({
+          success: result.success,
+          skill: name,
+          command,
+          result
+        });
+      })
+    );
+
+    // Weather agent endpoint
+    this.app.post('/api/agents/weather/execute', asyncHandler(async (req, res) => {
+      const { task, data = {} } = req.body;
+      
+      const weatherAgent = new WeatherAgent();
+      await weatherAgent.init();
+      
+      const result = await weatherAgent.execute(task, data);
+      
+      res.json({
+        success: true,
+        agent: 'weather',
+        task,
+        result
+      });
+    }));
+
+    // Security agent endpoint
+    this.app.post('/api/agents/security/execute', asyncHandler(async (req, res) => {
+      const { task, data = {} } = req.body;
+      
+      const securityAgent = new SecurityAgent();
+      await securityAgent.init();
+      
+      const result = await securityAgent.execute(task, data);
+      
+      res.json({
+        success: true,
+        agent: 'security',
+        task,
+        result
+      });
+    }));
+
+    // Skill creator agent endpoint
+    this.app.post('/api/agents/skill-creator/execute', asyncHandler(async (req, res) => {
+      const { task, data = {} } = req.body;
+      
+      const skillCreatorAgent = new SkillCreatorAgent();
+      await skillCreatorAgent.init();
+      
+      const result = await skillCreatorAgent.execute(task, data);
+      
+      res.json({
+        success: true,
+        agent: 'skill-creator',
+        task,
+        result
+      });
+    }));
   }
 
   start() {
