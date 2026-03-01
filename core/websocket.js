@@ -77,8 +77,8 @@ class WebSocketServer {
       });
     });
 
-    // Start server
-    server.listen(this.port, () => {
+    // Start server on 0.0.0.0 for Docker accessibility
+    server.listen(this.port, '0.0.0.0', () => {
       logger.info(`WebSocket server running on port ${this.port}`);
     });
 
