@@ -211,11 +211,6 @@ class MorisCore {
     // Input sanitization
     this.app.use(Validator.sanitizeBody);
 
-    // Root route FIRST (before other routes)
-    this.app.get('/', (req, res) => {
-      res.send(`<!DOCTYPE html><html><head><title>MORIS</title></head><body><h1>🚀 MORIS Autonomous</h1><p>12-Agent AI System running on port ${this.config.port}</p><div><a href="/health">Health</a> | <a href="/api/agents">Agents</a> | <a href="/api/stats">Stats</a></div></body></html>`);
-    });
-
     // Routes
     this.setupRoutes();
 
@@ -225,44 +220,230 @@ class MorisCore {
   }
 
   setupRoutes() {
-    // Root landing page
+    // Root landing page with Pixel Office
     this.app.get('/', (req, res) => {
-      res.send(`
-<!DOCTYPE html>
+      const agents = [
+        { id: 'moris', name: 'Moris', role: 'CEO', emoji: '🧠', color: '#00d4ff', desc: 'Chief Executive Officer - Strategic decisions' },
+        { id: 'dahlia', name: 'Dahlia', role: 'Personal Assistant', emoji: '🌸', color: '#ff6b9d', desc: 'Personal organization & scheduling' },
+        { id: 'coder', name: 'Pro Coder', role: 'Developer', emoji: '💻', color: '#4ade80', desc: 'Software development & code review' },
+        { id: 'copywriter', name: 'Copywriter', role: 'Content Creator', emoji: '✍️', color: '#fbbf24', desc: 'Content writing & copy optimization' },
+        { id: 'marketing', name: 'Marketing', role: 'Growth', emoji: '📈', color: '#a78bfa', desc: 'Marketing strategy & campaigns' },
+        { id: 'finance', name: 'Finance', role: 'CFO', emoji: '💰', color: '#22c55e', desc: 'Financial planning & analysis' },
+        { id: 'security', name: 'Security', role: 'Auditor', emoji: '🔒', color: '#ef4444', desc: 'Security audits & compliance' },
+        { id: 'qa', name: 'QA Tester', role: 'Quality', emoji: '🔍', color: '#f97316', desc: 'Testing & quality assurance' },
+        { id: 'devops', name: 'DevOps', role: 'Infrastructure', emoji: '⚙️', color: '#06b6d4', desc: 'Deployment & infrastructure' },
+        { id: 'designer', name: 'Designer', role: 'Creative', emoji: '🎨', color: '#ec4899', desc: 'UI/UX & visual design' },
+        { id: 'analyst', name: 'Analyst', role: 'Data', emoji: '📊', color: '#8b5cf6', desc: 'Data analysis & insights' },
+        { id: 'support', name: 'Support', role: 'Customer Success', emoji: '🤝', color: '#10b981', desc: 'Customer support & relations' }
+      ];
+      
+      const status = '● Online';
+      const uptime = Math.floor(process.uptime() / 60);
+      
+      res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MORIS Autonomous</title>
+  <title>MORIS Autonomous | 12-Agent AI System</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-           max-width: 800px; margin: 50px auto; padding: 0 20px;
-           background: #0a0a0a; color: #e0e0e0; }
-    h1 { color: #00d4ff; }
-    .status { background: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; }
-    .endpoint { background: #16213e; padding: 10px 15px; margin: 10px 0;
-                border-radius: 5px; font-family: monospace; }
-    a { color: #00d4ff; }
-    .emoji { font-size: 1.2em; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+      color: #e0e0e0; min-height: 100vh; padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    
+    /* Header */
+    header { text-align: center; padding: 40px 0; }
+    h1 { 
+      font-size: 3.5rem; 
+      background: linear-gradient(90deg, #00d4ff, #7c3aed);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+    }
+    .tagline { color: #888; font-size: 1.2rem; }
+    
+    /* Status Bar */
+    .status-bar {
+      background: rgba(26, 26, 46, 0.8);
+      border: 1px solid #00d4ff33;
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      justify-content: space-around;
+      margin: 30px 0;
+      flex-wrap: wrap;
+    }
+    .status-item { text-align: center; }
+    .status-label { color: #888; font-size: 0.85rem; text-transform: uppercase; }
+    .status-value { 
+      font-size: 1.5rem; font-weight: bold; color: #4ade80;
+    }
+    .online { color: #4ade80; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    
+    /* Pixel Office */
+    .pixel-office {
+      background: #0d1117;
+      border-radius: 16px;
+      padding: 30px;
+      margin: 30px 0;
+      border: 2px solid #21262d;
+    }
+    .office-title {
+      text-align: center;
+      font-size: 1.5rem;
+      color: #00d4ff;
+      margin-bottom: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    
+    /* Agent Grid */
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 15px;
+    }
+    .agent-card {
+      background: linear-gradient(145deg, #161b22 0%, #0d1117 100%);
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .agent-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--agent-color, #00d4ff);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .agent-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--agent-color, #00d4ff);
+    }
+    .agent-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+    }
+    .agent-avatar {
+      width: 50px; height: 50px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem;
+      background: var(--agent-color, #00d4ff)22;
+    }
+    .agent-info h3 { color: #fff; font-size: 1.1rem; }
+    .agent-role {
+      color: var(--agent-color, #00d4ff);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .agent-desc { color: #8b949e; font-size: 0.85rem; margin-top: 8px; }
+    .agent-status {
+      position: absolute; top: 15px; right: 15px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #4ade80; animation: blink 2s infinite;
+    }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+    
+    /* API Endpoints */
+    .api-section {
+      background: rgba(22, 27, 34, 0.8);
+      border-radius: 12px; padding: 25px; margin-top: 30px;
+    }
+    .api-title { color: #00d4ff; margin-bottom: 15px; }
+    .endpoint-list { display: flex; flex-wrap: wrap; gap: 10px; }
+    .endpoint-badge {
+      background: #21262d; color: #58a6ff;
+      padding: 8px 16px; border-radius: 6px;
+      text-decoration: none; font-family: monospace; font-size: 0.85rem;
+      border: 1px solid #30363d; transition: all 0.2s;
+    }
+    .endpoint-badge:hover {
+      background: #1f6feb; color: #fff; border-color: #58a6ff;
+    }
+    
+    /* Footer */
+    footer {
+      text-align: center; padding: 30px; color: #666;
+      border-top: 1px solid #21262d; margin-top: 30px;
+    }
+    
+    /* Mobile */
+    @media (max-width: 768px) {
+      h1 { font-size: 2rem; }
+      .agent-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
-  <h1><span class="emoji">🚀</span> MORIS Autonomous</h1>
-  <p>12-Agent AI System deployed and running.</p>
-  <div class="status">
-    <strong>Status:</strong> <span style="color: #4ade80;">● Online</span><br>
-    <strong>Version:</strong> 2.0.0<br>
-    <strong>Uptime:</strong> ${Math.floor(process.uptime() / 60)} minutes
+  <div class="container">
+    <header>
+      <h1>🚀 MORIS Autonomous</h1>
+      <p class="tagline">12-Agent AI Workforce System v2.0</p>
+    </header>
+    
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-label">Status</div>
+        <div class="status-value online">● Online</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Agents</div>
+        <div class="status-value">12</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Uptime</div>
+        <div class="status-value">${uptime}m</div>
+      </div>
+      <div class="status-item">
+        <div class="status-label">Version</div>
+        <div class="status-value">v2.0</div>
+      </div>
+    </div>
+    
+    <div class="pixel-office">
+      <div class="office-title">
+        🏢 Pixel Office — All Agents Active
+      </div>
+      <div class="agent-grid">
+        ${agents.map(a => \`<div class="agent-card" style="--agent-color: ${a.color}">
+          <div class="agent-status"></div>
+          <div class="agent-header">
+            <div class="agent-avatar">${a.emoji}</div>
+            <div class="agent-info">
+              <h3>${a.name}</h3>
+              <span class="agent-role">${a.role}</span>
+            </div>
+          </div>
+          <div class="agent-desc">${a.desc}</div>
+        </div>\`).join('')}
+      </div>
+    </div>
+    
+    <div class="api-section">
+      <h2 class="api-title">⚡ Available Endpoints</h2>
+      <div class="endpoint-list">
+        <a class="endpoint-badge" href="/health">/health</a>
+        <a class="endpoint-badge" href="/api/agents">/api/agents</a>
+        <a class="endpoint-badge" href="/api/stats">/api/stats</a>
+        <a class="endpoint-badge" href="/api/tasks">/api/tasks</a>
+        <a class="endpoint-badge" href="/api/skills">/api/skills</a>
+        <a class="endpoint-badge" href="/api/reports">/api/reports</a>
+      </div>
+    </div>
+    
+    <footer>
+      <p>🔌 WebSocket: ws://${req.headers.host}:3002</p>
+      <p style="margin-top:10px;font-size:0.8rem;">Deployed on Coolify • Powered by OpenClaw</p>
+    </footer>
   </div>
-  <h2>Available Endpoints</h2>
-  <div class="endpoint">GET <a href="/health">/health</a> — Health check</div>
-  <div class="endpoint">GET <a href="/api/agents">/api/agents</a> — List agents</div>
-  <div class="endpoint">GET <a href="/api/stats">/api/stats</a> — System stats</div>
-  <div class="endpoint">GET <a href="/api/tasks">/api/tasks</a> — Task queue</div>
-  <div class="endpoint">GET <a href="/api/skills">/api/skills</a> — Skill catalog</div>
-  <p style="margin-top: 30px; color: #888; font-size: 0.9em;">
-    <span class="emoji">🔌</span> WebSocket: ws://${req.headers.host}:3002
-  </p>
 </body>
 </html>`);
     });
