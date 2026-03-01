@@ -220,6 +220,48 @@ class MorisCore {
   }
 
   setupRoutes() {
+    // Root landing page
+    this.app.get('/', (req, res) => {
+      res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MORIS Autonomous</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           max-width: 800px; margin: 50px auto; padding: 0 20px;
+           background: #0a0a0a; color: #e0e0e0; }
+    h1 { color: #00d4ff; }
+    .status { background: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; }
+    .endpoint { background: #16213e; padding: 10px 15px; margin: 10px 0;
+                border-radius: 5px; font-family: monospace; }
+    a { color: #00d4ff; }
+    .emoji { font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1><span class="emoji">🚀</span> MORIS Autonomous</h1>
+  <p>12-Agent AI System deployed and running.</p>
+  <div class="status">
+    <strong>Status:</strong> <span style="color: #4ade80;">● Online</span><br>
+    <strong>Version:</strong> 2.0.0<br>
+    <strong>Uptime:</strong> ${Math.floor(process.uptime() / 60)} minutes
+  </div>
+  <h2>Available Endpoints</h2>
+  <div class="endpoint">GET <a href="/health">/health</a> — Health check</div>
+  <div class="endpoint">GET <a href="/api/agents">/api/agents</a> — List agents</div>
+  <div class="endpoint">GET <a href="/api/stats">/api/stats</a> — System stats</div>
+  <div class="endpoint">GET <a href="/api/tasks">/api/tasks</a> — Task queue</div>
+  <div class="endpoint">GET <a href="/api/skills">/api/skills</a> — Skill catalog</div>
+  <p style="margin-top: 30px; color: #888; font-size: 0.9em;">
+    <span class="emoji">🔌</span> WebSocket: ws://${req.headers.host}:3002
+  </p>
+</body>
+</html>`);
+    });
+
     // Health check
     this.app.get('/health', (req, res) => {
       this.monitor.recordRequest();
