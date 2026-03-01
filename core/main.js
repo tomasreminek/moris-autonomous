@@ -211,10 +211,6 @@ class MorisCore {
     // Input sanitization
     this.app.use(Validator.sanitizeBody);
 
-    // Root route FIRST (before other routes)
-    this.app.get('/', (req, res) => {
-      res.send(`<!DOCTYPE html><html><head><title>MORIS</title></head><body><h1>🚀 MORIS Autonomous</h1><p>12-Agent AI System running on port ${this.config.port}</p><div><a href="/health">Health</a> | <a href="/api/agents">Agents</a> | <a href="/api/stats">Stats</a></div></body></html>`);
-    });
 
     // Routes
     this.setupRoutes();
@@ -247,19 +243,16 @@ class MorisCore {
   </style>
 </head>
 <body>
-  <h1><span class="emoji">🚀</span> MORIS Autonomous</h1>
+  <h1><span class="emoji">🚀</span> MORIS Autonomous v2.0</h1>
   <p>12-Agent AI System deployed and running.</p>
   <div class="status">
     <strong>Status:</strong> <span style="color: #4ade80;">● Online</span><br>
-    <strong>Version:</strong> 2.0.0<br>
     <strong>Uptime:</strong> ${Math.floor(process.uptime() / 60)} minutes
   </div>
   <h2>Available Endpoints</h2>
   <div class="endpoint">GET <a href="/health">/health</a> — Health check</div>
   <div class="endpoint">GET <a href="/api/agents">/api/agents</a> — List agents</div>
   <div class="endpoint">GET <a href="/api/stats">/api/stats</a> — System stats</div>
-  <div class="endpoint">GET <a href="/api/tasks">/api/tasks</a> — Task queue</div>
-  <div class="endpoint">GET <a href="/api/skills">/api/skills</a> — Skill catalog</div>
   <p style="margin-top: 30px; color: #888; font-size: 0.9em;">
     <span class="emoji">🔌</span> WebSocket: ws://${req.headers.host}:3002
   </p>
@@ -510,12 +503,12 @@ class MorisCore {
 
   start() {
     return new Promise((resolve) => {
-      // Bind to 0.0.0.0 for Docker container accessibility
-      this.server = this.app.listen(this.config.port, '0.0.0.0', () => {
-        const host = process.env.HOST || '0.0.0.0';
-        logger.info(`🚀 MORIS Core v2.0 running on port ${this.config.port}`);
-        console.log(`✅ Server: http://${host}:${this.config.port}`);
-        console.log(`📊 Health: http://${host}:${this.config.port}/health`);
+      const port = this.config.port;
+      const host = '0.0.0.0';
+      this.server = this.app.listen(port, host, () => {
+        logger.info(`🚀 MORIS Core v2.0 running on port ${port}`);
+        console.log(`✅ Server: http://${host}:${port}`);
+        console.log(`📊 Health: http://${host}:${port}/health`);
         console.log(`🔌 WebSocket: ws://${host}:${this.config.wsPort}`);
         resolve(this);
       });
