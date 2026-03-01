@@ -463,11 +463,13 @@ class MorisCore {
 
   start() {
     return new Promise((resolve) => {
-      this.server = this.app.listen(this.config.port, () => {
+      // Bind to 0.0.0.0 for Docker container accessibility
+      this.server = this.app.listen(this.config.port, '0.0.0.0', () => {
+        const host = process.env.HOST || '0.0.0.0';
         logger.info(`🚀 MORIS Core v2.0 running on port ${this.config.port}`);
-        console.log(`✅ Server: http://localhost:${this.config.port}`);
-        console.log(`📊 Health: http://localhost:${this.config.port}/health`);
-        console.log(`🔌 WebSocket: ws://localhost:${this.config.wsPort}`);
+        console.log(`✅ Server: http://${host}:${this.config.port}`);
+        console.log(`📊 Health: http://${host}:${this.config.port}/health`);
+        console.log(`🔌 WebSocket: ws://${host}:${this.config.wsPort}`);
         resolve(this);
       });
     });
