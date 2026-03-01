@@ -1,0 +1,104 @@
+{
+  "deployment": "openclaw-extension",
+  "version": "2.1.0",
+  "description": "MORIS as OpenClaw extension - primary mode",
+  "requires": {
+    "openclaw": ">=2.0.0",
+    "redis": ">=6.0",
+    "node": ">=18.0"
+  },
+  "components": {
+    "gateway": {
+      "enabled": false,
+      "external": {
+        "provider": "openclaw",
+        "features": ["telegram", "signal", "webhook"]
+      }
+    },
+    "channels": {
+      "enabled": false,
+      "external": {
+        "provider": "openclaw",
+        "managed": true
+      }
+    },
+    "auth": {
+      "enabled": false,
+      "external": {
+        "provider": "openclaw",
+        "type": "session"
+      }
+    },
+    "queue": {
+      "enabled": true,
+      "type": "internal",
+      "backend": "redis"
+    },
+    "database": {
+      "enabled": true,
+      "type": "sqlite",
+      "path": "./data/moris.db"
+    },
+    "dashboard": {
+      "enabled": false,
+      "reason": "Use OpenClaw interface"
+    },
+    "agents": {
+      "enabled": true,
+      "count": 12,
+      "list": [
+        "moris", "dahlia", "coder", "copywriter",
+        "researcher", "qa", "data", "devops",
+        "weather", "security", "skill-creator", "document"
+      ]
+    },
+    "rag": {
+      "enabled": true,
+      "storage": "./data/knowledge"
+    },
+    "simulation": {
+      "enabled": true,
+      "maxAgents": 5
+    },
+    "workflows": {
+      "enabled": true
+    }
+  },
+  "external": {
+    "openclaw": {
+      "enabled": true,
+      "useGateway": true,
+      "useChannels": true,
+      "useAuth": true,
+      "useTools": true,
+      "integration": "extension",
+      "commands": ["moris", "moris-delegate", "moris-agents", "moris-status"],
+      "autoDelegate": true
+    }
+  },
+  "commercial": {
+    "model": "openclaw-marketplace",
+    "price": {
+      "monthly": 29,
+      "yearly": 290
+    },
+    "revenue": {
+      "developer": 0.70,
+      "openclaw": 0.30
+    },
+    "note": "Sold through OpenClaw marketplace, using OpenClaw infrastructure"
+  },
+  "migration": {
+    "fromStandalone": {
+      "compatible": true,
+      "dataPreserved": ["database", "knowledge-base", "agent-configs"],
+      "steps": [
+        "Backup data from standalone",
+        "Install as OpenClaw extension",
+        "Point to existing database",
+        "Test functionality",
+        "Disable standalone"
+      ]
+    }
+  }
+}
