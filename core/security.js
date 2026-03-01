@@ -9,8 +9,14 @@ const { logger } = require('./logger');
 
 class SecurityManager {
   constructor(config = {}) {
+    const jwtSecret = config.jwtSecret || process.env.JWT_SECRET;
+    
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET is required. Set it in environment variables or config.');
+    }
+    
     this.config = {
-      jwtSecret: config.jwtSecret || process.env.JWT_SECRET || 'change-me-in-production',
+      jwtSecret,
       jwtExpiresIn: config.jwtExpiresIn || '24h',
       apiKeyHeader: config.apiKeyHeader || 'x-api-key',
       bcryptRounds: config.bcryptRounds || 10,

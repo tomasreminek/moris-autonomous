@@ -145,12 +145,26 @@ class DatabaseManager {
   }
 
   updateAgent(id, updates) {
-    const fields = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');
+    // Whitelist allowed fields to prevent injection
+    const allowedFields = ['name', 'role', 'status', 'config'];
+    const updateKeys = Object.keys(updates).filter(k => allowedFields.includes(k));
+    
+    if (updateKeys.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+    
+    const fields = updateKeys.map(k => `${k} = @${k}`).join(', ');
     const stmt = this.db.prepare(`
       UPDATE agents SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = @id
     `);
     
-    const result = stmt.run({ ...updates, id });
+    // Build safe parameters object
+    const params = { id };
+    updateKeys.forEach(key => {
+      params[key] = updates[key];
+    });
+    
+    const result = stmt.run(params);
     logger.debug(`Agent updated: ${id}`);
     return result;
   }
@@ -217,16 +231,31 @@ class DatabaseManager {
   }
 
   updateTask(id, updates) {
-    const fields = Object.keys(updates).map(k => `${k} = @${k}`).join(', ');
+    // Whitelist allowed fields
+    const allowedFields = ['title', 'description', 'agent_id', 'status', 'priority', 'data', 'result', 'error', 'started_at', 'completed_at'];
+    const updateKeys = Object.keys(updates).filter(k => allowedFields.includes(k));
+    
+    if (updateKeys.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+    
+    const fields = updateKeys.map(k => `${k} = @${k}`).join(', ');
     const stmt = this.db.prepare(`
       UPDATE tasks SET ${fields} WHERE id = @id
     `);
     
-    // Serialize JSON fields
-    if (updates.data) updates.data = JSON.stringify(updates.data);
-    if (updates.result) updates.result = JSON.stringify(updates.result);
+    // Build safe parameters
+    const params = { id };
+    updateKeys.forEach(key => {
+      let value = updates[key];
+      // Serialize JSON fields
+      if ((key === 'data' || key === 'result') && typeof value === 'object') {
+        value = JSON.stringify(value);
+      }
+      params[key] = value;
+    });
     
-    const result = stmt.run({ ...updates, id });
+    const result = stmt.run(params);
     logger.debug(`Task updated: ${id}`);
     return result;
   }
