@@ -1,8 +1,8 @@
-# 🔥 MORIS Autonomous v2.0
+# 🔥 MORIS Autonomous v2.1
 
-> **Complete AI Agent Ecosystem** — Production-ready autonomous system with database, real-time communication, and intelligent orchestration.
+> **Enterprise AI Agent Ecosystem** — Production-ready autonomous system with database, real-time communication, intelligent orchestration, and extensive integrations.
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/tomasreminek/moris-autonomous)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/tomasreminek/moris-autonomous)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
