@@ -1,0 +1,46 @@
+# OpenClaw Config with MORIS Autonomous (Standalone)
+gateway:
+  port: 3456
+  host: 0.0.0.0
+  
+plugins:
+  enabled: true
+  allow: ["moris-autonomous"]
+  load:
+    paths: ["/data/openclaw/extensions"]
+  entries:
+    moris-autonomous:
+      enabled: true
+      config:
+        port: 3001
+        host: 0.0.0.0
+        adminPassword: "demo-admin-2024"
+        features:
+          rag: true
+          projectManagement: true
+          pricing: true
+          subagents: true
+        limits:
+          maxDocumentsPerAgent: 100
+          maxProjects: 50
+          maxTasksPerProject: 100
+        pricing:
+          individual: 19
+          startup: 49
+          enterprise: 149
+
+channels:
+  telegram:
+    enabled: true
+    accounts:
+      default:
+        token: "${TELEGRAM_BOT_TOKEN}"
+        enabled: true
+      
+gateway:
+  webhook:
+    enabled: true
+    
+logging:
+  level: info
+  format: combined

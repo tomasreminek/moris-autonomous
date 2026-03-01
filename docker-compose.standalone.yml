@@ -1,0 +1,35 @@
+# 🚀 MORIS Autonomous — Standalone One-Click
+# Včetně OpenClaw + Plugin + Auto-Update
+
+version: '3.8'
+
+services:
+  # OpenClaw Gateway s vestavěným MORIS pluginem
+  openclaw:
+    image: tomasreminek/openclaw-with-moris:latest
+    container_name: openclaw-moris
+    ports:
+      - "3456:3456"      # Gateway
+      - "3001:3001"      # MORIS Dashboard
+      - "3002:3002"      # WebSocket
+    volumes:
+      - openclaw-data:/data
+      - ./config.yaml:/app/config.yaml:ro
+    environment:
+      - NODE_ENV=production
+      - AUTO_UPDATE=true          # Auto-update pluginu
+      - MORIS_TIER=free           # Výchozí: free/starter/pro/enterprise
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "openclaw", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  openclaw-data:
+
+networks:
+  default:
+    name: moris-network

@@ -1,151 +1,332 @@
 #!/usr/bin/env node
 
 /**
- * MORIS Interactive Installer
- * Choose your deployment type
+ * 🚀 MORIS Autonomous — Setup Wizard
+ * Jako WooCommerce: nainstaluj za 2 minuty
  */
 
-const readline = require('readline');
-const fs = require('fs').promises;
+const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
+const colors = {
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  dim: '\x1b[2m',
+  red: '\x1b[31m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m'
+};
 
-const question = (prompt) => new Promise(resolve => rl.question(prompt, resolve));
-
-async function main() {
-  console.log(`
-🤖 MORIS Autonomous - Interactive Installer
-═══════════════════════════════════════════
-
-Choose how you want to deploy MORIS:
-
-1️⃣  STANDALONE (Recommended for production)
-    • Full control over infrastructure
-    • Can sell as SaaS or on-premise
-    • Independent of OpenClaw
-    • Best for: Entrepreneurs, businesses
-
-2️⃣  OPENCLAW EXTENSION (For personal use)
-    • Uses OpenClaw infrastructure
-    • Less code to maintain
-    • Integrated with your OpenClaw
-    • Best for: Personal productivity
-
-3️⃣  HYBRID (Advanced)
-    • Standalone core + OpenClaw adapter
-    • Run both simultaneously
-    • Maximum flexibility
-    • Best for: Power users, developers
-
+const log = {
+  info: (msg) => console.log(`${colors.cyan}ℹ${colors.reset} ${msg}`),
+  success: (msg) => console.log(`${colors.green}✓${colors.reset} ${msg}`),
+  warn: (msg) => console.log(`${colors.yellow}⚠${colors.reset} ${msg}`),
+  error: (msg) => console.log(`${colors.red}✗${colors.reset} ${msg}`),
+  step: (n, total, msg) => console.log(`\n${colors.bright}${colors.blue}[${n}/${total}]${colors.reset} ${colors.bright}${msg}${colors.reset}`),
+  banner: () => {
+    console.log(`
+${colors.magenta}
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   🚀 MORIS Autonomous — 21-Agent AI Workforce System      ║
+║                                                           ║
+║   Nainstaluj za 2 minuty jako WooCommerce                 ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝${colors.reset}
 `);
+  }
+};
 
-  const choice = await question('Select option (1/2/3): ');
+async function question(prompt, defaultValue = '', validate = null) {
+  return new Promise((resolve) => {
+    const readline = require('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    const display = defaultValue ? `${prompt} [${defaultValue}]: ` : `${prompt}: `;
+    rl.question(display, (answer) => {
+      rl.close();
+      const value = answer.trim() || defaultValue;
+      if (validate && !validate(value)) {
+        log.warn('Neplatná hodnota, zkuste znovu');
+        resolve(question(prompt, defaultValue, validate));
+      } else {
+        resolve(value);
+      }
+    });
+  });
+}
+
+async function confirm(prompt, defaultYes = true) {
+  const readline = require('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+  const suffix = defaultYes ? ' [Y/n]' : ' [y/N]';
   
-  switch(choice.trim()) {
-    case '1':
-      await installStandalone();
-      break;
-    case '2':
-      await installOpenClawExtension();
-      break;
-    case '3':
-      await installHybrid();
-      break;
-    default:
-      console.log('❌ Invalid choice. Defaulting to Standalone.');
-      await installStandalone();
+  return new Promise((resolve) => {
+    rl.question(prompt + suffix + ': ', (answer) => {
+      rl.close();
+      const value = answer.trim().toLowerCase();
+      if (!value) resolve(defaultYes);
+      else resolve(value === 'y' || value === 'yes');
+    });
+  });
+}
+
+async function checkPrerequisites() {
+  log.step(1, 5, 'Kontrola prerekvizit');
+  
+  const checks = [
+    { name: 'Node.js', cmd: 'node -v', min: '18.0.0' },
+    { name: 'npm', cmd: 'npm -v', min: '9.0.0' },
+    { name: 'Git', cmd: 'git --version', optional: true }
+  ];
+  
+  let allPassed = true;
+  for (const check of checks) {
+    try {
+      const result = require('child_process').execSync(check.cmd, { encoding: 'utf8' }).trim();
+      if (check.min) {
+        const version = result.replace(/^v/, '');
+        log.success(`${check.name} ${version}`);
+      } else {
+        log.success(`${check.name} nalezeno`);
+      }
+    } catch {
+      if (check.optional) {
+        log.warn(`${check.name} nenalezeno (volitelné)`);
+      } else {
+        log.error(`${check.name} nenalezeno`);
+        allPassed = false;
+      }
+    }
   }
   
-  rl.close();
+  if (!allPassed) {
+    log.error('Nainstalujte Node.js 18+');
+    process.exit(1);
+  }
+  
+  // Dostupný port
+  log.info('Hledání volného portu...');
+  const preferredPort = 3001;
+  const isPortFree = await checkPort(preferredPort);
+  if (!isPortFree) {
+    log.warn(`Port ${preferredPort} je obsazený`);
+  }
 }
 
-async function installStandalone() {
-  console.log('\n📦 Installing STANDALONE MORIS...\n');
-  
-  // Copy standalone config
-  await fs.copyFile(
-    'config/standalone.json',
-    'moris.config.json'
-  );
-  
-  console.log('✅ Configuration: standalone');
-  console.log('✅ Docker Compose: enabled');
-  console.log('✅ Full infrastructure: included');
+function checkPort(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port);
+  });
+}
+
+async function selectTier() {
+  log.step(2, 5, 'Výběr plánu');
   
   console.log(`
-🚀 NEXT STEPS:
-   1. cp .env.example .env
-   2. Edit .env with your settings
-   3. docker-compose up -d
-   4. Open http://localhost
+${colors.bright}Dostupné plány:${colors.reset}
 
-📚 Documentation: INSTALL.md
-💰 You can sell this as SaaS!
+  ${colors.green}[1] FREE${colors.reset}     — 2 agenti, 3 projekty (zdarma navždy)
+  ${colors.cyan}[2] STARTER${colors.reset}  — 5 agentů, 10 projektů ($19/měsíc)
+  ${colors.magenta}[3] PRO${colors.reset}      — 12 agentů, neomezeně ($49/měsíc)
+  ${colors.yellow}[4] ENTERPRISE${colors.reset} — 21 agentů, white-label ($149/měsíc)
+`);
+  
+  const choice = await question('Vyberte plán (1-4)', '1', (v) => /^[1-4]$/.test(v));
+  
+  const tiers = {
+    '1': { name: 'FREE', price: 0, agents: 2, projects: 3 },
+    '2': { name: 'STARTER', price: 19, agents: 5, projects: 10 },
+    '3': { name: 'PRO', price: 49, agents: 12, projects: Infinity },
+    '4': { name: 'ENTERPRISE', price: 149, agents: 21, projects: Infinity }
+  };
+  
+  const selected = tiers[choice];
+  log.success(`Vybráno: ${colors.bright}${selected.name}${colors.reset}`);
+  
+  if (selected.price > 0) {
+    const confirmed = await confirm(`Spustit 14denní trial ${selected.name}?`);
+    selected.trial = confirmed;
+  }
+  
+  return selected;
+}
+
+async function createAdmin() {
+  log.step(3, 5, 'Vytvoření admin účtu');
+  
+  const email = await question('Admin email', 'admin@moris.local', (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+  const password = await question('Admin heslo (min 8 znaků)', generatePassword(), (v) => v.length >= 8);
+  
+  log.success('Admin účet vytvořen');
+  
+  return { email, password };
+}
+
+async function configureEnvironment(tier, admin) {
+  log.step(4, 5, 'Konfigurace prostředí');
+  
+  const envPath = path.join(__dirname, '.env');
+  
+  const env = {
+    NODE_ENV: 'production',
+    PORT: 3001,
+    JWT_SECRET: crypto.randomBytes(32).toString('hex'),
+    ADMIN_EMAIL: admin.email,
+    ADMIN_PASSWORD_HASH: hashPassword(admin.password),
+    TIER: tier.name.toLowerCase(),
+    MAX_AGENTS: tier.agents,
+    MAX_PROJECTS: tier.projects === Infinity ? 'unlimited' : tier.projects,
+    FEATURES_RAG: tier.price >= 19 ? 'true' : 'false',
+    FEATURES_REPORTS: tier.price >= 49 ? 'true' : 'false',
+    TRIAL_UNTIL: tier.trial ? getTrialEnd() : ''
+  };
+  
+  const envContent = Object.entries(env)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  
+  fs.writeFileSync(envPath, envContent);
+  log.success('.env soubor vytvořen');
+  
+  return env;
+}
+
+function hashPassword(password) {
+  // Sandboxed - neukládám reálné hashe
+  return 'demo-hash-' + crypto.createHash('sha256').update(password).digest('hex').substring(0, 16);
+}
+
+function generatePassword() {
+  return crypto.randomBytes(6).toString('base64').slice(0, 12);
+}
+
+function getTrialEnd() {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  return date.toISOString();
+}
+
+async function installDependencies() {
+  log.step(5, 5, 'Instalace závislostí');
+  
+  log.info('Spouštím npm install...');
+  
+  return new Promise((resolve, reject) => {
+    const npm = spawn('npm', ['install', '--production'], {
+      stdio: 'pipe',
+      cwd: __dirname
+    });
+    
+    let output = '';
+    npm.stdout.on('data', (d) => output += d);
+    npm.stderr.on('data', (d) => output += d);
+    
+    npm.on('close', (code) => {
+      if (code === 0) {
+        log.success('Závislosti nainstalovány');
+        resolve();
+      } else {
+        log.error('Instalace selhala');
+        reject(new Error('npm install failed'));
+      }
+    });
+  });
+}
+
+async function displaySuccess(admin, env) {
+  console.log(`
+${colors.green}${colors.bright}
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   🎉 MORIS Autonomous úspěšně nainstalován!              ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝${colors.reset}
+
+${colors.bright}Přístup:${colors.reset}
+  🌐 Dashboard:  ${colors.cyan}http://localhost:3001${colors.reset}
+  🔑 Login:      ${colors.bright}${admin.email}${colors.reset}
+  🔒 Heslo:      ${colors.bright}${admin.password}${colors.reset}
+
+${colors.bright}Příkazy:${colors.reset}
+  ${colors.cyan}/moris${colors.reset}         — Otevřít dashboard
+  ${colors.cyan}/moris-agents${colors.reset}  — Seznam agentů  
+  ${colors.cyan}/moris-tasks${colors.reset}   — Aktivní úkoly
+
+${colors.bright}Správa:${colors.reset}
+  ${colors.dim}npm start${colors.reset}     — Spustit server
+  ${colors.dim}npm stop${colors.reset}      — Zastavit server
+  ${colors.dim}npm run logs${colors.reset}   — Zobrazit logy
+
+─────────────────────────────────────────────────────────
+
+${tierInfo(env.TIER)}
+
+${colors.yellow}📖 Dokumentace:${colors.reset} https://docs.openclaw.ai/plugins/moris-autonomous
+${colors.yellow}💬 Podpora:${colors.reset}    https://discord.gg/clawd
 `);
 }
 
-async function installOpenClawExtension() {
-  console.log('\n🔌 Installing OPENCLAW EXTENSION...\n');
-  
-  // Copy OpenClaw config
-  await fs.copyFile(
-    'config/openclaw.json',
-    'moris.config.json'
-  );
-  
-  console.log('✅ Configuration: openclaw extension');
-  console.log('✅ Uses OpenClaw gateway: yes');
-  console.log('✅ Uses OpenClaw channels: yes');
-  console.log('⚠️  Standalone server: disabled');
-  
-  console.log(`
-🚀 NEXT STEPS:
-   1. Copy 'extensions/moris' to your OpenClaw extensions folder
-   2. Add to your OpenClaw config.yaml:
-      
-      extensions:
-        moris:
-          enabled: true
-          path: ./extensions/moris
-   
-   3. Restart OpenClaw
-
-📚 Documentation: OPENCLAW-EXTENSION.md
-⚠️  For personal use only (not for resale)
-`);
+function tierInfo(tier) {
+  const info = {
+    free: `${colors.green}FREE tier${colors.reset} — 2 agenti, 3 projekty zdarma`,
+    starter: `${colors.cyan}STARTER tier${colors.reset} — 5 agentů, trial 14 dnů`,
+    pro: `${colors.magenta}PRO tier${colors.reset} — 12 agentů, API přístup`,
+    enterprise: `${colors.yellow}ENTERPRISE tier${colors.reset} — 21 agentů, white-label`
+  };
+  return info[tier] || info.free;
 }
 
-async function installHybrid() {
-  console.log('\n🔀 Installing HYBRID mode...\n');
+// Hlavní funkce
+async function main() {
+  log.banner();
   
-  // Copy hybrid config
-  await fs.copyFile(
-    'config/hybrid.json',
-    'moris.config.json'
-  );
-  
-  console.log('✅ Configuration: hybrid');
-  console.log('✅ Standalone server: enabled');
-  console.log('✅ OpenClaw adapter: enabled');
-  console.log('✅ Shared core: yes');
-  
-  console.log(`
-🚀 NEXT STEPS:
-   1. cp .env.example .env
-   2. docker-compose up -d (starts standalone)
-   3. Copy 'extensions/moris' to OpenClaw
-   4. Configure both to point to same Redis
-   
-💡 You can use:
-   • Standalone: http://localhost (full features)
-   • Via OpenClaw: Telegram/Signal integration
-
-📚 Documentation: HYBRID.md
-`);
+  try {
+    await checkPrerequisites();
+    const tier = await selectTier();
+    const admin = await createAdmin();
+    const env = await configureEnvironment(tier, admin);
+    await installDependencies();
+    await displaySuccess(admin, env);
+    
+    // Nabídka spuštění
+    const startNow = await confirm('\nSpustit MORIS nyní?');
+    if (startNow) {
+      log.info('Spouštím server...');
+      const server = spawn('node', ['core/main.js'], {
+        stdio: 'inherit',
+        cwd: __dirname
+      });
+      server.on('error', (err) => log.error(`Chyba: ${err.message}`));
+    }
+    
+  } catch (error) {
+    log.error(`Instalace selhala: ${error.message}`);
+    process.exit(1);
+  }
 }
 
-main().catch(console.error);
+// Pokud spuštěno přímo
+if (require.main === module) {
+  main().catch(console.error);
+}
+
+module.exports = { main };

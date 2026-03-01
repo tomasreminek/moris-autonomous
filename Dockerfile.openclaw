@@ -1,0 +1,50 @@
+# 🚀 OpenClaw + MORIS Autonomous — All-in-One Image
+# Build: docker build -f Dockerfile.openclaw -t openclaw-with-moris .
+
+# Použijeme oficiální Node image
+FROM node:20-alpine
+
+# Instalace závislostí
+RUN apk add --no-cache \
+    git \
+    curl \
+    ca-certificates \
+    && rm -rf /var/cache/apk/*
+
+# Instalace OpenClaw
+RUN npm install -g @openclaw/cli
+
+# Vytvoření adresáře pro plugin
+WORKDIR /app
+
+# Kopírování pluginu
+COPY . /app/extensions/moris-autonomous/
+
+# Instalace závislostí pluginu
+RUN cd /app/extensions/moris-autonomous && \
+    npm install --production
+
+# Auto-update skript
+COPY docker/auto-update.sh /usr/local/bin/auto-update
+RUN chmod +x /usr/local/bin/auto-update
+
+# Health check skript
+COPY docker/healthcheck.sh /usr/local/bin/healthcheck
+RUN chmod +x /usr/local/bin/healthcheck
+
+# Výchozí config
+COPY docker/config.standalone.yaml /app/config.yaml
+
+# Porty
+EXPOSE 3456 3001 3002
+
+# Environment
+ENV NODE_ENV=production
+ENV AUTO_UPDATE=true
+ENV PLUGIN_CHECK_INTERVAL=3600
+
+# Entrypoint
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
