@@ -21,6 +21,8 @@ const { HealthMonitor } = require('./monitor');
 const { AgentRegistry, CoderAgent, CopywriterAgent } = require('./agents');
 const { WeatherAgent, SecurityAgent, SkillCreatorAgent } = require('./agents-skilled');
 const { SkillLoader } = require('./skill-loader');
+const { ProjectManager } = require('./project-manager');
+const { LicenseManager } = require('./license-manager');
 const { Validator } = require('./validation');
 const { requestContext } = require('./context');
 const { RequestLogger } = require('./request-logger');
@@ -42,6 +44,8 @@ class MorisCore {
     this.reporting = null;
     this.monitor = null;
     this.agentRegistry = null;
+    this.projectManager = null;
+    this.licenseManager = null;
   }
 
   async init() {
@@ -67,6 +71,12 @@ class MorisCore {
 
     // Initialize monitor
     this.monitor = new HealthMonitor();
+
+    // Initialize project manager
+    this.projectManager = new ProjectManager(this.db);
+
+    // Initialize license manager
+    this.licenseManager = new LicenseManager(process.env);
 
     // Setup Express middleware and routes
     this.setupExpress();
@@ -217,6 +227,7 @@ class MorisCore {
     
     this.app.use('/api/', standardLimiter);
     this.app.use('/api/auth/', strictLimiter);
+    this.app.use('/dashboard', standardLimiter);
 
     // Body parsing with limits
     this.app.use(express.json({ 
@@ -707,6 +718,166 @@ class MorisCore {
         result
       });
     }));
+
+    // Auth & Dashboard Routes
+    this.setupAuthRoutes();
+    this.setupProjectRoutes();
+    this.setupStaticRoutes();
+  }
+
+  setupAuthRoutes() {
+    // Auth middleware
+    const requireAuth = (req, res, next) => {
+      const token = req.headers.authorization?.replace('Bearer ', '') || 
+                    req.query.token || 
+                    req.cookies?.token;
+      
+      if (!token && req.path !== '/api/auth/login' && req.path !== '/login') {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
+      
+      req.user = { email: 'admin@moris.local' }; // Simplified for demo
+      next();
+    };
+
+    // Login
+    this.app.post('/api/auth/login', asyncHandler(async (req, res) => {
+      const { email, password } = req.body;
+      
+      // Demo auth (replace with real auth)
+      if (email === 'admin@moris.local' && password === process.env.ADMIN_PASSWORD || 'admin') {
+        const token = Math.random().toString(36).substring(2);
+        res.json({ 
+          success: true, 
+          token,
+          user: { email, role: 'admin' }
+        });
+      } else {
+        res.status(401).json({ success: false, error: 'Invalid credentials' });
+      }
+    }));
+
+    // Get current user
+    this.app.get('/api/auth/me', requireAuth, (req, res) => {
+      res.json({ success: true, user: req.user });
+    });
+
+    // Logout
+    this.app.post('/api/auth/logout', requireAuth, (req, res) => {
+      res.json({ success: true, message: 'Logged out' });
+    });
+  }
+
+  setupProjectRoutes() {
+    // Projects
+    this.app.get('/api/projects', asyncHandler(async (req, res) => {
+      const projects = this.projectManager.getAllProjects();
+      res.json({ success: true, count: projects.length, projects });
+    }));
+
+    this.app.post('/api/projects', asyncHandler(async (req, res) => {
+      const { name, description, agents = [], deadline } = req.body;
+      
+      if (!name) throw new ValidationError('Project name is required');
+      
+      const project = this.projectManager.createProject({
+        name,
+        description,
+        agentIds: agents,
+        deadline
+      });
+      
+      res.status(201).json({ 
+        success: true, 
+        message: 'Project created',
+        project 
+      });
+    }));
+
+    this.app.get('/api/projects/:id', asyncHandler(async (req, res) => {
+      const project = this.projectManager.getProject(req.params.id);
+      if (!project) throw new NotFoundError('Project not found');
+      
+      const tasks = this.projectManager.getProjectTasks(req.params.id);
+      const progress = this.projectManager.getProjectProgress(req.params.id);
+      
+      res.json({ 
+        success: true, 
+        project: { ...project, tasks, progress }
+      });
+    }));
+
+    this.app.patch('/api/projects/:id', asyncHandler(async (req, res) => {
+      const updates = req.body;
+      const project = this.projectManager.updateProject(req.params.id, updates);
+      res.json({ success: true, project });
+    }));
+
+    this.app.delete('/api/projects/:id', asyncHandler(async (req, res) => {
+      this.projectManager.deleteProject(req.params.id);
+      res.json({ success: true, message: 'Project deleted' });
+    }));
+
+    // Project tasks
+    this.app.post('/api/projects/:id/tasks', asyncHandler(async (req, res) => {
+      const { title, description, agent_id, priority = 5 } = req.body;
+      
+      const task = this.projectManager.addTaskToProject(req.params.id, {
+        title,
+        description,
+        agentId: agent_id,
+        priority
+      });
+      
+      res.status(201).json({ success: true, task });
+    }));
+
+    // Assign agent to project
+    this.app.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
+      const { agent_id } = req.body;
+      this.projectManager.assignAgentToProject(req.params.id, agent_id);
+      res.json({ success: true, message: 'Agent assigned' });
+    }));
+
+    // Upload documents (RAG)
+    this.app.post('/api/agents/:id/documents', asyncHandler(async (req, res) => {
+      // Document upload endpoint
+      res.json({ 
+        success: true, 
+        message: 'Document upload endpoint (RAG)' 
+      });
+    }));
+
+    // License/Pricing info
+    this.app.get('/api/license', (req, res) => {
+      const license = this.licenseManager?.getStatus() || {
+        tier: 'free',
+        agents: 2,
+        projects: 3
+      };
+      res.json({ success: true, license });
+    });
+  }
+
+  setupStaticRoutes() {
+    const path = require('path');
+    
+    // Login page
+    this.app.get('/login', (req, res) => {
+      res.sendFile(path.join(__dirname, '..', 'dashboard', 'public', 'login.html'));
+    });
+    
+    // Protected dashboard
+    this.app.get('/dashboard', (req, res) => {
+      const token = req.query.token || req.cookies?.token;
+      if (!token) {
+        return res.redirect('/login');
+      }
+      res.sendFile(path.join(__dirname, '..', 'dashboard', 'public', 'dashboard.html'));
+    });
+    
+    // Serve static files
+    this.app.use('/dashboard/static', express.static(path.join(__dirname, '..', 'dashboard', 'public')));
   }
 
   start() {
