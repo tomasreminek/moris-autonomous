@@ -7,7 +7,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const session = require('express-session');
 const compression = require('compression');
 const path = require('path');
 
@@ -18,15 +17,17 @@ const { WebSocketServer } = require('./websocket');
 const { TaskQueue, JobTypes, createAgentTaskProcessor, createReportProcessor } = require('./task-queue');
 const { ReportingSystem } = require('./reporting');
 const { HealthMonitor } = require('./monitor');
+const { TaskScheduler } = require('./scheduler');
+const { TelegramBot } = require('./telegram-bot');
 const { AgentRegistry, CoderAgent, CopywriterAgent } = require('./agents');
 const { WeatherAgent, SecurityAgent, SkillCreatorAgent } = require('./agents-skilled');
 const { SkillLoader } = require('./skill-loader');
-const { ProjectManager } = require('./project-manager');
-const { LicenseManager } = require('./license-manager');
 const { Validator } = require('./validation');
 const { requestContext } = require('./context');
 const { RequestLogger } = require('./request-logger');
+const { LLMService } = require('./llm-service');
 const { HTTP_STATUS, RATE_LIMIT, LIMITS } = require('./constants');
+const { MCBridge } = require('./mc-bridge');
 
 class MorisCore {
   constructor(config = {}) {
@@ -44,8 +45,10 @@ class MorisCore {
     this.reporting = null;
     this.monitor = null;
     this.agentRegistry = null;
-    this.projectManager = null;
-    this.licenseManager = null;
+    this.scheduler = null;
+    this.telegram = null;
+    this.llm = new LLMService();
+    this.mcBridge = null;
   }
 
   async init() {
@@ -53,9 +56,9 @@ class MorisCore {
 
     // Initialize database
     this.db = new DatabaseManager(this.config.dbPath);
-    
+
     // Initialize agent registry
-    this.agentRegistry = new AgentRegistry();
+    this.agentRegistry = new AgentRegistry(this.llm);
     this.setupDefaultAgents();
 
     // Initialize task queue
@@ -72,11 +75,37 @@ class MorisCore {
     // Initialize monitor
     this.monitor = new HealthMonitor();
 
-    // Initialize project manager
-    this.projectManager = new ProjectManager(this.db);
+    // Initialize scheduler
+    this.scheduler = new TaskScheduler(this.db, this.taskQueue);
+    await this.scheduler.loadSchedules();
 
-    // Initialize license manager
-    this.licenseManager = new LicenseManager(process.env);
+    // Initialize telegram bot
+    this.telegram = new TelegramBot({
+      token: process.env.TELEGRAM_BOT_TOKEN,
+      allowedChats: process.env.TELEGRAM_ALLOWED_CHATS ? process.env.TELEGRAM_ALLOWED_CHATS.split(',') : []
+    });
+    await this.telegram.init();
+
+    // Initialize Mission Control bridge
+    this.mcBridge = new MCBridge({
+      mcUrl: process.env.MC_URL,
+      apiKey: process.env.MC_API_KEY,
+      agentName: 'Moris',
+      agentRole: 'orchestrator',
+    });
+
+    // Connect to MC (non-blocking — will retry in background if unavailable)
+    this.mcBridge.connect().then(ok => {
+      if (ok) logger.info('Mission Control bridge connected');
+    });
+
+    // Log MC events
+    this.mcBridge.on('task_event', (evt) => {
+      logger.info(`[MC] Task event: ${evt.type}`, evt.task);
+    });
+    this.mcBridge.on('work_items', (items) => {
+      logger.info(`[MC] ${items.length} work item(s) received`);
+    });
 
     // Setup Express middleware and routes
     this.setupExpress();
@@ -88,10 +117,10 @@ class MorisCore {
   setupDefaultAgents() {
     // Create default agents if none exist
     const existingAgents = this.db.getAllAgents();
-    
+
     if (existingAgents.length === 0) {
       logger.info('Creating default agents...');
-      
+
       // Create agents in database
       this.db.createAgent({
         id: 'moris',
@@ -150,48 +179,29 @@ class MorisCore {
   setupExpress() {
     // Trust proxy (for correct IP behind nginx)
     this.app.set('trust proxy', 1);
-    
+
     // Security middleware
-    this.app.use(helmet({ 
+    this.app.use(helmet({
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false
     }));
-    this.app.use(cors({ 
+    this.app.use(cors({
       origin: process.env.CORS_ORIGIN || '*',
       credentials: true
     }));
-    
+
     // Compression
     this.app.use(compression());
 
-    // Session middleware for authentication
-    this.app.use(session({
-      secret: process.env.JWT_SECRET || 'moris-secret-demo-key',
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        secure: process.env.NODE_ENV === 'production'
-      }
-    }));
-
-    // Auth middleware
-    this.authMiddleware = (req, res, next) => {
-      if (req.session && req.session.authenticated) {
-        return next();
-      }
-      return res.status(401).json({ success: false, error: 'Unauthorized - Please login' });
-    };
-
     // Request context & correlation IDs
     this.app.use(requestContext.middleware());
-    
+
     // Enhanced request logging
-    this.app.use(RequestLogger.create({ 
+    this.app.use(RequestLogger.create({
       logBody: process.env.NODE_ENV === 'development',
       sensitiveFields: ['password', 'token', 'secret', 'apiKey', 'api_key', 'jwt']
     }));
-    
+
     // Rate limiting with different tiers
     const standardLimiter = rateLimit({
       windowMs: RATE_LIMIT.DEFAULT_WINDOW_MS,
@@ -202,7 +212,7 @@ class MorisCore {
       handler: (req, res) => {
         res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
           success: false,
-          error: { 
+          error: {
             message: 'Too many requests, please try again later',
             code: 'RATE_LIMITED',
             retryAfter: Math.ceil(RATE_LIMIT.DEFAULT_WINDOW_MS / 1000)
@@ -210,37 +220,37 @@ class MorisCore {
         });
       }
     });
-    
+
     const strictLimiter = rateLimit({
       windowMs: RATE_LIMIT.AUTH_WINDOW_MS,
       max: RATE_LIMIT.AUTH_MAX_REQUESTS,
       handler: (req, res) => {
         res.status(HTTP_STATUS.TOO_MANY_REQUESTS).json({
           success: false,
-          error: { 
+          error: {
             message: 'Too many authentication attempts',
             code: 'AUTH_RATE_LIMITED'
           }
         });
       }
     });
-    
+
     this.app.use('/api/', standardLimiter);
     this.app.use('/api/auth/', strictLimiter);
-    this.app.use('/dashboard', standardLimiter);
 
     // Body parsing with limits
-    this.app.use(express.json({ 
+    this.app.use(express.json({
       limit: LIMITS.MAX_JSON_PAYLOAD,
       strict: true // Only accept arrays and objects
     }));
-    this.app.use(express.urlencoded({ 
-      extended: true, 
-      limit: LIMITS.MAX_JSON_PAYLOAD 
+    this.app.use(express.urlencoded({
+      extended: true,
+      limit: LIMITS.MAX_JSON_PAYLOAD
     }));
-    
+
     // Input sanitization
     this.app.use(Validator.sanitizeBody);
+
 
     // Routes
     this.setupRoutes();
@@ -251,230 +261,41 @@ class MorisCore {
   }
 
   setupRoutes() {
-    // Root landing page with Pixel Office
+    // Root landing page
     this.app.get('/', (req, res) => {
-      const agents = [
-        { id: 'moris', name: 'Moris', role: 'CEO', emoji: '🧠', color: '#00d4ff', desc: 'Chief Executive Officer - Strategic decisions' },
-        { id: 'dahlia', name: 'Dahlia', role: 'Personal Assistant', emoji: '🌸', color: '#ff6b9d', desc: 'Personal organization & scheduling' },
-        { id: 'coder', name: 'Pro Coder', role: 'Developer', emoji: '💻', color: '#4ade80', desc: 'Software development & code review' },
-        { id: 'copywriter', name: 'Copywriter', role: 'Content Creator', emoji: '✍️', color: '#fbbf24', desc: 'Content writing & copy optimization' },
-        { id: 'marketing', name: 'Marketing', role: 'Growth', emoji: '📈', color: '#a78bfa', desc: 'Marketing strategy & campaigns' },
-        { id: 'finance', name: 'Finance', role: 'CFO', emoji: '💰', color: '#22c55e', desc: 'Financial planning & analysis' },
-        { id: 'security', name: 'Security', role: 'Auditor', emoji: '🔒', color: '#ef4444', desc: 'Security audits & compliance' },
-        { id: 'qa', name: 'QA Tester', role: 'Quality', emoji: '🔍', color: '#f97316', desc: 'Testing & quality assurance' },
-        { id: 'devops', name: 'DevOps', role: 'Infrastructure', emoji: '⚙️', color: '#06b6d4', desc: 'Deployment & infrastructure' },
-        { id: 'designer', name: 'Designer', role: 'Creative', emoji: '🎨', color: '#ec4899', desc: 'UI/UX & visual design' },
-        { id: 'analyst', name: 'Analyst', role: 'Data', emoji: '📊', color: '#8b5cf6', desc: 'Data analysis & insights' },
-        { id: 'support', name: 'Support', role: 'Customer Success', emoji: '🤝', color: '#10b981', desc: 'Customer support & relations' }
-      ];
-      
-      const status = '● Online';
-      const uptime = Math.floor(process.uptime() / 60);
-      
-      res.send(`<!DOCTYPE html>
+      res.send(`
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MORIS Autonomous | 12-Agent AI System</title>
+  <title>MORIS Autonomous</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { 
-      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
-      color: #e0e0e0; min-height: 100vh; padding: 20px;
-    }
-    .container { max-width: 1200px; margin: 0 auto; }
-    
-    /* Header */
-    header { text-align: center; padding: 40px 0; }
-    h1 { 
-      font-size: 3.5rem; 
-      background: linear-gradient(90deg, #00d4ff, #7c3aed);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-      margin-bottom: 10px;
-    }
-    .tagline { color: #888; font-size: 1.2rem; }
-    
-    /* Status Bar */
-    .status-bar {
-      background: rgba(26, 26, 46, 0.8);
-      border: 1px solid #00d4ff33;
-      border-radius: 12px;
-      padding: 20px;
-      display: flex;
-      justify-content: space-around;
-      margin: 30px 0;
-      flex-wrap: wrap;
-    }
-    .status-item { text-align: center; }
-    .status-label { color: #888; font-size: 0.85rem; text-transform: uppercase; }
-    .status-value { 
-      font-size: 1.5rem; font-weight: bold; color: #4ade80;
-    }
-    .online { color: #4ade80; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-    
-    /* Pixel Office */
-    .pixel-office {
-      background: #0d1117;
-      border-radius: 16px;
-      padding: 30px;
-      margin: 30px 0;
-      border: 2px solid #21262d;
-    }
-    .office-title {
-      text-align: center;
-      font-size: 1.5rem;
-      color: #00d4ff;
-      margin-bottom: 25px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-    }
-    
-    /* Agent Grid */
-    .agent-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 15px;
-    }
-    .agent-card {
-      background: linear-gradient(145deg, #161b22 0%, #0d1117 100%);
-      border: 1px solid #30363d;
-      border-radius: 12px;
-      padding: 20px;
-      transition: all 0.3s ease;
-      position: relative;
-      overflow: hidden;
-    }
-    .agent-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--agent-color, #00d4ff);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }
-    .agent-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-      background: var(--agent-color, #00d4ff);
-    }
-    .agent-header {
-      display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
-    }
-    .agent-avatar {
-      width: 50px; height: 50px;
-      border-radius: 10px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.8rem;
-      background: var(--agent-color, #00d4ff)22;
-    }
-    .agent-info h3 { color: #fff; font-size: 1.1rem; }
-    .agent-role {
-      color: var(--agent-color, #00d4ff);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    .agent-desc { color: #8b949e; font-size: 0.85rem; margin-top: 8px; }
-    .agent-status {
-      position: absolute; top: 15px; right: 15px;
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #4ade80; animation: blink 2s infinite;
-    }
-    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-    
-    /* API Endpoints */
-    .api-section {
-      background: rgba(22, 27, 34, 0.8);
-      border-radius: 12px; padding: 25px; margin-top: 30px;
-    }
-    .api-title { color: #00d4ff; margin-bottom: 15px; }
-    .endpoint-list { display: flex; flex-wrap: wrap; gap: 10px; }
-    .endpoint-badge {
-      background: #21262d; color: #58a6ff;
-      padding: 8px 16px; border-radius: 6px;
-      text-decoration: none; font-family: monospace; font-size: 0.85rem;
-      border: 1px solid #30363d; transition: all 0.2s;
-    }
-    .endpoint-badge:hover {
-      background: #1f6feb; color: #fff; border-color: #58a6ff;
-    }
-    
-    /* Footer */
-    footer {
-      text-align: center; padding: 30px; color: #666;
-      border-top: 1px solid #21262d; margin-top: 30px;
-    }
-    
-    /* Mobile */
-    @media (max-width: 768px) {
-      h1 { font-size: 2rem; }
-      .agent-grid { grid-template-columns: 1fr; }
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           max-width: 800px; margin: 50px auto; padding: 0 20px;
+           background: #0a0a0a; color: #e0e0e0; }
+    h1 { color: #00d4ff; }
+    .status { background: #1a1a2e; padding: 15px; border-radius: 8px; margin: 20px 0; }
+    .endpoint { background: #16213e; padding: 10px 15px; margin: 10px 0;
+                border-radius: 5px; font-family: monospace; }
+    a { color: #00d4ff; }
+    .emoji { font-size: 1.2em; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>🚀 MORIS Autonomous</h1>
-      <p class="tagline">12-Agent AI Workforce System v2.0</p>
-    </header>
-    
-    <div class="status-bar">
-      <div class="status-item">
-        <div class="status-label">Status</div>
-        <div class="status-value online">● Online</div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Agents</div>
-        <div class="status-value">12</div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Uptime</div>
-        <div class="status-value">${uptime}m</div>
-      </div>
-      <div class="status-item">
-        <div class="status-label">Version</div>
-        <div class="status-value">v2.0</div>
-      </div>
-    </div>
-    
-    <div class="pixel-office">
-      <div class="office-title">
-        🏢 Pixel Office — All Agents Active
-      </div>
-      <div class="agent-grid">
-        ${agents.map(a => \`<div class="agent-card" style="--agent-color: ${a.color}">
-          <div class="agent-status"></div>
-          <div class="agent-header">
-            <div class="agent-avatar">${a.emoji}</div>
-            <div class="agent-info">
-              <h3>${a.name}</h3>
-              <span class="agent-role">${a.role}</span>
-            </div>
-          </div>
-          <div class="agent-desc">${a.desc}</div>
-        </div>\`).join('')}
-      </div>
-    </div>
-    
-    <div class="api-section">
-      <h2 class="api-title">⚡ Available Endpoints</h2>
-      <div class="endpoint-list">
-        <a class="endpoint-badge" href="/health">/health</a>
-        <a class="endpoint-badge" href="/api/agents">/api/agents</a>
-        <a class="endpoint-badge" href="/api/stats">/api/stats</a>
-        <a class="endpoint-badge" href="/api/tasks">/api/tasks</a>
-        <a class="endpoint-badge" href="/api/skills">/api/skills</a>
-        <a class="endpoint-badge" href="/api/reports">/api/reports</a>
-      </div>
-    </div>
-    
-    <footer>
-      <p>🔌 WebSocket: ws://${req.headers.host}:3002</p>
-      <p style="margin-top:10px;font-size:0.8rem;">Deployed on Coolify • Powered by OpenClaw</p>
-    </footer>
+  <h1><span class="emoji">🚀</span> MORIS Autonomous v2.0</h1>
+  <p>12-Agent AI System deployed and running.</p>
+  <div class="status">
+    <strong>Status:</strong> <span style="color: #4ade80;">● Online</span><br>
+    <strong>Uptime:</strong> ${Math.floor(process.uptime() / 60)} minutes
   </div>
+  <h2>Available Endpoints</h2>
+  <div class="endpoint">GET <a href="/health">/health</a> — Health check</div>
+  <div class="endpoint">GET <a href="/api/agents">/api/agents</a> — List agents</div>
+  <div class="endpoint">GET <a href="/api/stats">/api/stats</a> — System stats</div>
+  <p style="margin-top: 30px; color: #888; font-size: 0.9em;">
+    <span class="emoji">🔌</span> WebSocket: ws://${req.headers.host}:3002
+  </p>
 </body>
 </html>`);
     });
@@ -498,7 +319,7 @@ class MorisCore {
       const stats = this.db.getStats();
       const agentStats = this.agentRegistry.getStats();
       const queueStats = await this.taskQueue.getAllStats();
-      
+
       res.json({
         success: true,
         data: {
@@ -519,12 +340,12 @@ class MorisCore {
     this.app.get('/api/agents/:id', asyncHandler(async (req, res) => {
       const agent = this.db.getAgent(req.params.id);
       if (!agent) throw new NotFoundError('Agent not found');
-      
+
       const registryAgent = this.agentRegistry.get(req.params.id);
       if (registryAgent) {
         agent.stats = registryAgent.getStats();
       }
-      
+
       res.json({ success: true, agent });
     }));
 
@@ -533,18 +354,18 @@ class MorisCore {
       const filters = {};
       if (req.query.status) filters.status = req.query.status;
       if (req.query.agent_id) filters.agent_id = req.query.agent_id;
-      
+
       const tasks = this.db.getTasks(filters);
       res.json({ success: true, count: tasks.length, tasks });
     }));
 
     this.app.post('/api/tasks', asyncHandler(async (req, res) => {
       const { title, description, agent_id, priority = 5, data = {} } = req.body;
-      
+
       if (!title) throw new ValidationError('Title is required');
-      
+
       const taskId = `task_${Date.now()}`;
-      
+
       // Create task in database
       this.db.createTask({
         id: taskId,
@@ -589,7 +410,7 @@ class MorisCore {
 
     this.app.post('/api/reports', asyncHandler(async (req, res) => {
       const { type = 'dashboard' } = req.body;
-      
+
       let result;
       switch (type) {
         case 'dashboard':
@@ -616,7 +437,7 @@ class MorisCore {
       const filters = {};
       if (req.query.agent_id) filters.agent_id = req.query.agent_id;
       if (req.query.level) filters.level = req.query.level;
-      
+
       const logs = this.db.getActivityLogs(filters, req.query.limit || 100);
       res.json({ success: true, count: logs.length, logs });
     }));
@@ -631,6 +452,9 @@ class MorisCore {
 
     // Skill routes
     this.setupSkillRoutes();
+
+    // Mission Control proxy routes
+    this.setupMCRoutes();
   }
 
   setupSkillRoutes() {
@@ -639,7 +463,7 @@ class MorisCore {
       const skillLoader = new SkillLoader();
       await skillLoader.loadAllSkills();
       const catalog = skillLoader.getCatalog();
-      
+
       res.json({
         success: true,
         count: catalog.length,
@@ -648,17 +472,17 @@ class MorisCore {
     }));
 
     // Execute skill
-    this.app.post('/api/skills/:name/execute', 
+    this.app.post('/api/skills/:name/execute',
       Validator.validateIdParam,
       asyncHandler(async (req, res) => {
         const { name } = req.params;
         const { command = 'default', args = {} } = req.body;
-        
+
         const skillLoader = new SkillLoader();
         await skillLoader.loadAllSkills();
-        
+
         const result = await skillLoader.execute(name, command, args);
-        
+
         res.json({
           success: result.success,
           skill: name,
@@ -671,12 +495,12 @@ class MorisCore {
     // Weather agent endpoint
     this.app.post('/api/agents/weather/execute', asyncHandler(async (req, res) => {
       const { task, data = {} } = req.body;
-      
+
       const weatherAgent = new WeatherAgent();
       await weatherAgent.init();
-      
+
       const result = await weatherAgent.execute(task, data);
-      
+
       res.json({
         success: true,
         agent: 'weather',
@@ -688,12 +512,12 @@ class MorisCore {
     // Security agent endpoint
     this.app.post('/api/agents/security/execute', asyncHandler(async (req, res) => {
       const { task, data = {} } = req.body;
-      
+
       const securityAgent = new SecurityAgent();
       await securityAgent.init();
-      
+
       const result = await securityAgent.execute(task, data);
-      
+
       res.json({
         success: true,
         agent: 'security',
@@ -704,13 +528,14 @@ class MorisCore {
 
     // Skill creator agent endpoint
     this.app.post('/api/agents/skill-creator/execute', asyncHandler(async (req, res) => {
+
       const { task, data = {} } = req.body;
-      
+
       const skillCreatorAgent = new SkillCreatorAgent();
       await skillCreatorAgent.init();
-      
+
       const result = await skillCreatorAgent.execute(task, data);
-      
+
       res.json({
         success: true,
         agent: 'skill-creator',
@@ -718,201 +543,105 @@ class MorisCore {
         result
       });
     }));
-
-    // Auth & Dashboard Routes
-    this.setupAuthRoutes();
-    this.setupProjectRoutes();
-    this.setupStaticRoutes();
-  }
-
-  setupAuthRoutes() {
-    // Auth middleware
-    const requireAuth = (req, res, next) => {
-      const token = req.headers.authorization?.replace('Bearer ', '') || 
-                    req.query.token || 
-                    req.cookies?.token;
-      
-      if (!token && req.path !== '/api/auth/login' && req.path !== '/login') {
-        return res.status(401).json({ success: false, error: 'Authentication required' });
-      }
-      
-      req.user = { email: 'admin@moris.local' }; // Simplified for demo
-      next();
-    };
-
-    // Login
-    this.app.post('/api/auth/login', asyncHandler(async (req, res) => {
-      const { email, password } = req.body;
-      
-      // Demo auth (replace with real auth)
-      if (email === 'admin@moris.local' && password === process.env.ADMIN_PASSWORD || 'admin') {
-        const token = Math.random().toString(36).substring(2);
-        res.json({ 
-          success: true, 
-          token,
-          user: { email, role: 'admin' }
-        });
-      } else {
-        res.status(401).json({ success: false, error: 'Invalid credentials' });
-      }
-    }));
-
-    // Get current user
-    this.app.get('/api/auth/me', requireAuth, (req, res) => {
-      res.json({ success: true, user: req.user });
-    });
-
-    // Logout
-    this.app.post('/api/auth/logout', requireAuth, (req, res) => {
-      res.json({ success: true, message: 'Logged out' });
-    });
-  }
-
-  setupProjectRoutes() {
-    // Projects
-    this.app.get('/api/projects', asyncHandler(async (req, res) => {
-      const projects = this.projectManager.getAllProjects();
-      res.json({ success: true, count: projects.length, projects });
-    }));
-
-    this.app.post('/api/projects', asyncHandler(async (req, res) => {
-      const { name, description, agents = [], deadline } = req.body;
-      
-      if (!name) throw new ValidationError('Project name is required');
-      
-      const project = this.projectManager.createProject({
-        name,
-        description,
-        agentIds: agents,
-        deadline
-      });
-      
-      res.status(201).json({ 
-        success: true, 
-        message: 'Project created',
-        project 
-      });
-    }));
-
-    this.app.get('/api/projects/:id', asyncHandler(async (req, res) => {
-      const project = this.projectManager.getProject(req.params.id);
-      if (!project) throw new NotFoundError('Project not found');
-      
-      const tasks = this.projectManager.getProjectTasks(req.params.id);
-      const progress = this.projectManager.getProjectProgress(req.params.id);
-      
-      res.json({ 
-        success: true, 
-        project: { ...project, tasks, progress }
-      });
-    }));
-
-    this.app.patch('/api/projects/:id', asyncHandler(async (req, res) => {
-      const updates = req.body;
-      const project = this.projectManager.updateProject(req.params.id, updates);
-      res.json({ success: true, project });
-    }));
-
-    this.app.delete('/api/projects/:id', asyncHandler(async (req, res) => {
-      this.projectManager.deleteProject(req.params.id);
-      res.json({ success: true, message: 'Project deleted' });
-    }));
-
-    // Project tasks
-    this.app.post('/api/projects/:id/tasks', asyncHandler(async (req, res) => {
-      const { title, description, agent_id, priority = 5 } = req.body;
-      
-      const task = this.projectManager.addTaskToProject(req.params.id, {
-        title,
-        description,
-        agentId: agent_id,
-        priority
-      });
-      
-      res.status(201).json({ success: true, task });
-    }));
-
-    // Assign agent to project
-    this.app.post('/api/projects/:id/agents', asyncHandler(async (req, res) => {
-      const { agent_id } = req.body;
-      this.projectManager.assignAgentToProject(req.params.id, agent_id);
-      res.json({ success: true, message: 'Agent assigned' });
-    }));
-
-    // Upload documents (RAG)
-    this.app.post('/api/agents/:id/documents', asyncHandler(async (req, res) => {
-      // Document upload endpoint
-      res.json({ 
-        success: true, 
-        message: 'Document upload endpoint (RAG)' 
-      });
-    }));
-
-    // License/Pricing info
-    this.app.get('/api/license', (req, res) => {
-      const license = this.licenseManager?.getStatus() || {
-        tier: 'free',
-        agents: 2,
-        projects: 3
-      };
-      res.json({ success: true, license });
-    });
-  }
-
-  setupStaticRoutes() {
-    const path = require('path');
-    
-    // Login page
-    this.app.get('/login', (req, res) => {
-      res.sendFile(path.join(__dirname, '..', 'dashboard', 'public', 'login.html'));
-    });
-    
-    // Protected dashboard
-    this.app.get('/dashboard', (req, res) => {
-      const token = req.query.token || req.cookies?.token;
-      if (!token) {
-        return res.redirect('/login');
-      }
-      res.sendFile(path.join(__dirname, '..', 'dashboard', 'public', 'dashboard.html'));
-    });
-    
-    // Serve static files
-    this.app.use('/dashboard/static', express.static(path.join(__dirname, '..', 'dashboard', 'public')));
   }
 
   start() {
     return new Promise((resolve) => {
-      // Bind to 0.0.0.0 for Docker container accessibility
-      this.server = this.app.listen(this.config.port, '0.0.0.0', () => {
-        const host = process.env.HOST || '0.0.0.0';
-        logger.info(`🚀 MORIS Core v2.0 running on port ${this.config.port}`);
-        console.log(`✅ Server: http://${host}:${this.config.port}`);
-        console.log(`📊 Health: http://${host}:${this.config.port}/health`);
+      const port = this.config.port;
+      const host = '0.0.0.0';
+      this.server = this.app.listen(port, host, () => {
+        logger.info(`🚀 MORIS Core v2.0 running on port ${port}`);
+        console.log(`✅ Server: http://${host}:${port}`);
+        console.log(`📊 Health: http://${host}:${port}/health`);
         console.log(`🔌 WebSocket: ws://${host}:${this.config.wsPort}`);
         resolve(this);
       });
     });
   }
 
+  setupMCRoutes() {
+    // MC bridge status
+    this.app.get('/api/mc/status', (req, res) => {
+      res.json({
+        success: true,
+        mc: this.mcBridge.getStatus(),
+      });
+    });
+
+    // Create task on MC task board
+    this.app.post('/api/mc/tasks', asyncHandler(async (req, res) => {
+      const { title, description, assigned_to, priority, status } = req.body;
+      if (!title) throw new ValidationError('Title is required');
+
+      const result = await this.mcBridge.createTask({
+        title, description, assigned_to, priority, status,
+      });
+      res.status(201).json({ success: true, task: result });
+    }));
+
+    // List MC tasks
+    this.app.get('/api/mc/tasks', asyncHandler(async (req, res) => {
+      const result = await this.mcBridge.listTasks(req.query);
+      res.json({ success: true, ...result });
+    }));
+
+    // Update MC task
+    this.app.put('/api/mc/tasks/:id', asyncHandler(async (req, res) => {
+      const result = await this.mcBridge.updateTask(req.params.id, req.body);
+      res.json({ success: true, task: result });
+    }));
+
+    // Broadcast task to agents
+    this.app.post('/api/mc/tasks/:id/broadcast', asyncHandler(async (req, res) => {
+      const result = await this.mcBridge.broadcastTask(req.params.id);
+      res.json({ success: true, ...result });
+    }));
+
+    // List MC agents
+    this.app.get('/api/mc/agents', asyncHandler(async (req, res) => {
+      const result = await this.mcBridge.listAgents();
+      res.json({ success: true, ...result });
+    }));
+
+    // Send message to agent via MC
+    this.app.post('/api/mc/messages', asyncHandler(async (req, res) => {
+      const { to, message } = req.body;
+      if (!to || !message) throw new ValidationError('"to" and "message" are required');
+
+      const result = await this.mcBridge.sendMessage(to, message);
+      res.json({ success: true, ...result });
+    }));
+
+    // Get messages for Moris
+    this.app.get('/api/mc/messages', asyncHandler(async (req, res) => {
+      const result = await this.mcBridge.getMessages();
+      res.json({ success: true, ...result });
+    }));
+  }
+
   async shutdown() {
     logger.info('Shutting down MORIS Core...');
-    
+
     if (this.server) {
       this.server.close();
     }
-    
+
     if (this.wsServer) {
       // Close WebSocket connections
     }
-    
+
+    if (this.mcBridge) {
+      await this.mcBridge.disconnect();
+    }
+
     if (this.taskQueue) {
       await this.taskQueue.close();
     }
-    
+
     if (this.db) {
       this.db.close();
     }
-    
+
     logger.info('MORIS Core shutdown complete');
   }
 }
@@ -920,7 +649,7 @@ class MorisCore {
 // Start if run directly
 if (require.main === module) {
   const core = new MorisCore();
-  
+
   core.init()
     .then(() => core.start())
     .catch(err => {
